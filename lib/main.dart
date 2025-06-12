@@ -1,5 +1,15 @@
 import 'package:flutter/material.dart';
 
+// New class (AppTheme) to hold a global (static) variable for the theme mode.
+class AppTheme {
+  static bool isDarkMode = false;
+  static ValueNotifier<bool> isDarkModeNotifier = ValueNotifier<bool>(false);
+  static ThemeData get lightTheme =>
+      ThemeData(primarySwatch: Colors.blue, brightness: Brightness.light);
+  static ThemeData get darkTheme =>
+      ThemeData(primarySwatch: Colors.blue, brightness: Brightness.dark);
+}
+
 void main() {
   runApp(const MyApp());
 }
@@ -9,11 +19,17 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Certify App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(primarySwatch: Colors.blue),
-      home: const HomeScreen(),
+    // Use a ValueListenableBuilder (or a static getter) so that the app rebuilds when the theme changes.
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppTheme.isDarkModeNotifier,
+      builder: (context, isDark, child) {
+        return MaterialApp(
+          title: 'Certify App',
+          debugShowCheckedModeBanner: false,
+          theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
+          home: const HomeScreen(),
+        );
+      },
     );
   }
 }
@@ -248,8 +264,7 @@ class SettingsScreen extends StatelessWidget {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder:
-                        (context) => const PlaceholderScreen(title: 'Security'),
+                    builder: (context) => const SecurityScreen(),
                   ),
                 ),
           ),
@@ -272,10 +287,7 @@ class SettingsScreen extends StatelessWidget {
             onTap:
                 () => Navigator.push(
                   context,
-                  MaterialPageRoute(
-                    builder:
-                        (context) => const PlaceholderScreen(title: 'About'),
-                  ),
+                  MaterialPageRoute(builder: (context) => const AboutScreen()),
                 ),
           ),
           _buildSettingsTile(
@@ -287,9 +299,7 @@ class SettingsScreen extends StatelessWidget {
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
-                    builder:
-                        (context) =>
-                            const PlaceholderScreen(title: 'Help & Support'),
+                    builder: (context) => const HelpSupportScreen(),
                   ),
                 ),
           ),
@@ -373,22 +383,126 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-// New PlaceholderScreen (a StatelessWidget) for other settings tiles (Security, Theme, About, Help & Support)
-class PlaceholderScreen extends StatelessWidget {
-  const PlaceholderScreen({super.key, required this.title});
+// Re-insert SecurityScreen (a StatefulWidget) for the Security tile (with "Change Password" (a dialog) and a "Security Options" (a 2FA toggle)).
+class SecurityScreen extends StatefulWidget {
+  const SecurityScreen({super.key});
 
-  final String title;
+  @override
+  State<SecurityScreen> createState() => _SecurityScreenState();
+}
+
+class _SecurityScreenState extends State<SecurityScreen> {
+  final _oldPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+  bool _enable2FA = false;
+
+  @override
+  void dispose() {
+    _oldPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
+    super.dispose();
+  }
+
+  void _showChangePasswordDialog() {
+    showDialog(
+      context: context,
+      builder: (context) {
+        return AlertDialog(
+          title: const Text('Change Password'),
+          content: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                TextField(
+                  controller: _oldPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Old Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _newPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'New Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: _confirmPasswordController,
+                  obscureText: true,
+                  decoration: const InputDecoration(
+                    labelText: 'Confirm New Password',
+                    border: OutlineInputBorder(),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Navigator.of(context).pop();
+              },
+              child: const Text('Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () {
+                debugPrint('Password change requested');
+                Navigator.of(context).pop();
+              },
+              child: const Text('Submit'),
+            ),
+          ],
+        );
+      },
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: Text(title), centerTitle: true),
-      body: Center(child: Text("This is the $title screen.")),
+      appBar: AppBar(title: const Text('Security Settings'), centerTitle: true),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Security Options',
+              style: TextStyle(fontWeight: FontWeight.bold),
+            ),
+            const SizedBox(height: 12),
+            SwitchListTile(
+              title: const Text('Enable Two-Factor Authentication (2FA)'),
+              subtitle: const Text(
+                'Add an extra layer of security to your account.',
+              ),
+              value: _enable2FA,
+              onChanged: (bool value) {
+                setState(() {
+                  _enable2FA = value;
+                });
+              },
+            ),
+            const SizedBox(height: 24),
+            ElevatedButton(
+              onPressed: _showChangePasswordDialog,
+              child: const Text('Change Password'),
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
 
-// New ThemeScreen (a StatefulWidget) for the Theme tile
+// Update ThemeScreen so that toggling the switch updates the global (static) variable (and notifies listeners).
 class ThemeScreen extends StatefulWidget {
   const ThemeScreen({super.key});
 
@@ -397,7 +511,7 @@ class ThemeScreen extends StatefulWidget {
 }
 
 class _ThemeScreenState extends State<ThemeScreen> {
-  bool _isDarkMode = false;
+  bool _isDarkMode = AppTheme.isDarkModeNotifier.value;
 
   @override
   Widget build(BuildContext context) {
@@ -413,10 +527,114 @@ class _ThemeScreenState extends State<ThemeScreen> {
               setState(() {
                 _isDarkMode = value;
               });
+              // Update the global (static) variable (and notify listeners) so that the app's theme is updated.
+              AppTheme.isDarkModeNotifier.value = value;
               debugPrint('Theme toggled: ${_isDarkMode ? "Dark" : "Light"}');
             },
           ),
         ],
+      ),
+    );
+  }
+}
+
+// New AboutScreen (a StatelessWidget) for the About tile
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('About'), centerTitle: true),
+      body: ListView(
+        children: [
+          const SizedBox(height: 24),
+          const Center(
+            child: CircleAvatar(
+              radius: 50,
+              backgroundImage: NetworkImage('https://i.pravatar.cc/150?img=3'),
+            ),
+          ),
+          const SizedBox(height: 16),
+          const Center(
+            child: Text(
+              'Certify App',
+              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+            ),
+          ),
+          const SizedBox(height: 24),
+          ListTile(title: const Text('Version'), subtitle: const Text('1.0.0')),
+          ListTile(
+            title: const Text('Copyright'),
+            subtitle: const Text('© 2025 Certify App'),
+          ),
+          ListTile(
+            title: const Text('Terms & Privacy'),
+            trailing: const Icon(Icons.chevron_right),
+            onTap: () => debugPrint('Terms & Privacy pressed'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// New HelpSupportScreen (a StatelessWidget) for the Help & Support tile
+class HelpSupportScreen extends StatelessWidget {
+  const HelpSupportScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Help & Support'), centerTitle: true),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            const Text(
+              'Contact Us',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 12),
+            const TextField(
+              decoration: InputDecoration(
+                hintText: 'Your Message',
+                border: OutlineInputBorder(),
+              ),
+              maxLines: 3,
+            ),
+            const SizedBox(height: 12),
+            ElevatedButton(
+              onPressed: () => debugPrint('Send pressed'),
+              child: const Text('Send'),
+            ),
+            const SizedBox(height: 24),
+            const Text(
+              'FAQ',
+              style: TextStyle(fontWeight: FontWeight.bold, fontSize: 18),
+            ),
+            const SizedBox(height: 12),
+            ListView.separated(
+              shrinkWrap: true,
+              physics: const NeverScrollableScrollPhysics(),
+              itemCount: 3,
+              separatorBuilder: (context, index) => const Divider(),
+              itemBuilder: (context, index) {
+                final faqTitles = [
+                  'How do I create a certificate?',
+                  'How do I share my certificate?',
+                  'How do I update my profile?',
+                ];
+                return ListTile(
+                  title: Text(faqTitles[index]),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () => debugPrint('FAQ item ${index + 1} tapped'),
+                );
+              },
+            ),
+          ],
+        ),
       ),
     );
   }
