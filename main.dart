@@ -131,142 +131,125 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _showShareOptions(context);
-        },
-        backgroundColor: Colors.blue[600],
-        foregroundColor: Colors.white,
-        child: const Icon(Icons.share),
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(16),
-        ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.endFloat,
-      body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text(
-              'Welcome back!',
-              style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
-            ),
-            const SizedBox(height: 8),
-            const Text(
-              'Manage your digital certificates',
-              style: TextStyle(fontSize: 16, color: Colors.grey),
-            ),
-            const SizedBox(height: 24),
-            GridView.count(
-              shrinkWrap: true,
-              physics: const NeverScrollableScrollPhysics(),
-              crossAxisCount: 2,
-              crossAxisSpacing: 16,
-              mainAxisSpacing: 16,
-              children: [
-                _buildActionCard(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text(
+            'Welcome back!',
+            style: TextStyle(fontSize: 24, fontWeight: FontWeight.bold),
+          ),
+          const SizedBox(height: 8),
+          const Text(
+            'Manage your digital certificates',
+            style: TextStyle(fontSize: 16, color: Colors.grey),
+          ),
+          const SizedBox(height: 24),
+          GridView.count(
+            shrinkWrap: true,
+            physics: const NeverScrollableScrollPhysics(),
+            crossAxisCount: 2,
+            crossAxisSpacing: 16,
+            mainAxisSpacing: 16,
+            children: [
+              _buildActionCard(
+                context,
+                Icons.add_circle_outline,
+                'Create',
+                Colors.blue[600]!,
+                () => debugPrint('Create tapped'),
+                gradient: LinearGradient(
+                  colors: [Colors.blue[600]!, Colors.blue[400]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              _buildActionCard(
+                context,
+                Icons.cloud_upload_outlined,
+                'Upload',
+                Colors.green[600]!,
+                () => debugPrint('Upload tapped'),
+                gradient: LinearGradient(
+                  colors: [Colors.green[600]!, Colors.green[400]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              _buildActionCard(
+                context,
+                Icons.share_outlined,
+                'Share',
+                Colors.orange[600]!,
+                () => debugPrint('Share tapped'),
+                gradient: LinearGradient(
+                  colors: [Colors.orange[600]!, Colors.orange[400]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              _buildActionCard(
+                context,
+                Icons.settings_outlined,
+                'Settings',
+                Colors.purple[600]!,
+                () => Navigator.push(
                   context,
-                  Icons.add_circle_outline,
-                  'Create',
-                  Colors.blue[600]!,
-                  () => debugPrint('Create tapped'),
-                  gradient: LinearGradient(
-                    colors: [Colors.blue[600]!, Colors.blue[400]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                  MaterialPageRoute(builder: (context) => const SettingsScreen()),
                 ),
-                _buildActionCard(
-                  context,
-                  Icons.cloud_upload_outlined,
-                  'Upload',
-                  Colors.green[600]!,
-                  () => debugPrint('Upload tapped'),
-                  gradient: LinearGradient(
-                    colors: [Colors.green[600]!, Colors.green[400]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
+                gradient: LinearGradient(
+                  colors: [Colors.purple[600]!, Colors.purple[400]!],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
                 ),
-                _buildActionCard(
-                  context,
-                  Icons.share_outlined,
-                  'Share',
-                  Colors.orange[600]!,
-                  () => _showShareOptions(context),
-                  gradient: LinearGradient(
-                    colors: [Colors.orange[600]!, Colors.orange[400]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-                _buildActionCard(
-                  context,
-                  Icons.settings_outlined,
-                  'Settings',
-                  Colors.purple[600]!,
-                  () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SettingsScreen()),
-                  ),
-                  gradient: LinearGradient(
-                    colors: [Colors.purple[600]!, Colors.purple[400]!],
-                    begin: Alignment.topLeft,
-                    end: Alignment.bottomRight,
-                  ),
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                const Text(
-                  'Recent Activity',
-                  style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                ),
-                TextButton(
-                  onPressed: () {},
-                  child: const Text('View All'),
-                ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Card(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(vertical: 8),
-                child: ListView.separated(
-                  shrinkWrap: true,
-                  physics: const NeverScrollableScrollPhysics(),
-                  itemCount: 3,
-                  separatorBuilder: (context, index) => const Divider(height: 1),
-                  itemBuilder: (context, index) => ListTile(
-                    leading: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: Colors.blue[50],
-                        shape: BoxShape.circle,
-                      ),
-                      child: const Icon(Icons.assignment_turned_in, color: Colors.blue),
+              ),
+            ],
+          ),
+          const SizedBox(height: 32),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Recent Activity',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              ),
+              TextButton(
+                onPressed: () {},
+                child: const Text('View All'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Card(
+            child: Padding(
+              padding: const EdgeInsets.symmetric(vertical: 8),
+              child: ListView.separated(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                itemCount: 3,
+                separatorBuilder: (context, index) => const Divider(height: 1),
+                itemBuilder: (context, index) => ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: Colors.blue[50],
+                      shape: BoxShape.circle,
                     ),
-                    title: Text(
-                      'Certificate ${index + 1}',
-                      style: const TextStyle(fontWeight: FontWeight.w600),
-                    ),
-                    subtitle: const Text('Issued on 2023-06-01'),
-                    trailing: IconButton(
-                      icon: Icon(Icons.share, color: Colors.blue[600]),
-                      onPressed: () => _shareCertificate(context, 'Certificate ${index + 1}'),
-                    ),
-                    onTap: () {},
+                    child: const Icon(Icons.assignment_turned_in, color: Colors.blue),
                   ),
+                  title: Text(
+                    'Certificate ${index + 1}',
+                    style: const TextStyle(fontWeight: FontWeight.w600),
+                  ),
+                  subtitle: const Text('Issued on 2023-06-01'),
+                  trailing: Icon(Icons.chevron_right, color: Colors.grey[600]),
+                  onTap: () {},
                 ),
               ),
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -275,8 +258,8 @@ class DashboardScreen extends StatelessWidget {
     BuildContext context,
     IconData icon,
     String title,
-    Color color,
-    VoidCallback onTap, {
+    Color color, void Function() param4, {
+    VoidCallback? onTap,
     Gradient? gradient,
   }) {
     return Card(
@@ -312,64 +295,16 @@ class DashboardScreen extends StatelessWidget {
       ),
     );
   }
-
-  void _showShareOptions(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      builder: (context) => Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Text(
-              'Share Options',
-              style: TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.bold,
-                color: Colors.blue[600],
-              ),
-            ),
-          ),
-          ListTile(
-            leading: const Icon(Icons.link),
-            title: const Text('Share certificate link'),
-            onTap: () {
-              Navigator.pop(context);
-              _shareCertificate(context, 'Certificate Link');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.file_download),
-            title: const Text('Share certificate file'),
-            onTap: () {
-              Navigator.pop(context);
-              _shareCertificate(context, 'Certificate File');
-            },
-          ),
-          ListTile(
-            leading: const Icon(Icons.qr_code),
-            title: const Text('Generate QR code'),
-            onTap: () {
-              Navigator.pop(context);
-              ScaffoldMessenger.of(context).showSnackBar(
-                const SnackBar(content: Text('Generating QR code...')),
-              );
-            },
-          ),
-          const SizedBox(height: 8),
-        ],
-      ),
-    );
-  }
-
-  void _shareCertificate(BuildContext context, String certificateName) {
-    final text = 'Check out my certificate "$certificateName" on Certify App!';
-    Share.share(text);
-  }
 }
 
 class CertificatesScreen extends StatelessWidget {
   const CertificatesScreen({super.key});
+
+  // Added share method
+  void _shareCertificate(BuildContext context, String certificateName) {
+    final text = 'Check out my certificate "$certificateName" on Certify App!';
+    Share.share(text);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -433,15 +368,24 @@ class CertificatesScreen extends StatelessWidget {
                   itemBuilder: (context) => [
                     const PopupMenuItem(
                       value: 'share',
-                      child: Text('Share'),
+                      child: ListTile(
+                        leading: Icon(Icons.share),
+                        title: Text('Share'),
+                      ),
                     ),
                     const PopupMenuItem(
                       value: 'view',
-                      child: Text('View Details'),
+                      child: ListTile(
+                        leading: Icon(Icons.visibility),
+                        title: Text('View Details'),
+                      ),
                     ),
                     const PopupMenuItem(
                       value: 'download',
-                      child: Text('Download'),
+                      child: ListTile(
+                        leading: Icon(Icons.download),
+                        title: Text('Download'),
+                      ),
                     ),
                   ],
                   onSelected: (value) {
@@ -457,11 +401,6 @@ class CertificatesScreen extends StatelessWidget {
         ),
       ],
     );
-  }
-
-  void _shareCertificate(BuildContext context, String certificateName) {
-    final text = 'Check out my certificate "$certificateName" on Certify App!';
-    Share.share(text);
   }
 }
 
