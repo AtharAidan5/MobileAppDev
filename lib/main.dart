@@ -1,24 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'upload_screen.dart';
+import 'create_certificate_screen.dart';
 
-void main() {
-  runApp(const MyApp());
-}
+// Theme management
+class AppTheme {
+  static bool isDarkMode = false;
+  static ValueNotifier<bool> isDarkModeNotifier = ValueNotifier<bool>(false);
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
-
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Certify App',
-      debugShowCheckedModeBanner: false,
-      theme: ThemeData(
+  static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.light(
-          primary: const Color(0xFF2D3436), // Dark gray
-          secondary: const Color(0xFF00B894), // Mint green
-          tertiary: const Color(0xFF6C5CE7), // Purple
+          primary: const Color(0xFF2D3436),
+          secondary: const Color(0xFF00B894),
+          tertiary: const Color(0xFF6C5CE7),
           surface: Colors.white,
           background: const Color(0xFFF8F8F8),
           error: const Color(0xFFFF3B30),
@@ -28,13 +23,13 @@ class MyApp extends StatelessWidget {
             fontSize: 42,
             fontWeight: FontWeight.w800,
             letterSpacing: -1,
-            color: Colors.white,
+            color: const Color(0xFF2D3436),
           ),
           displayMedium: GoogleFonts.poppins(
             fontSize: 32,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
-            color: Colors.white,
+            color: const Color(0xFF2D3436),
           ),
           bodyLarge: GoogleFonts.inter(
             fontSize: 17,
@@ -60,6 +55,63 @@ class MyApp extends StatelessWidget {
           elevation: 0,
           centerTitle: true,
           backgroundColor: Colors.transparent,
+          foregroundColor: const Color(0xFF2D3436),
+          titleTextStyle: GoogleFonts.poppins(
+            fontSize: 20,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: const Color(0xFF2D3436),
+          ),
+        ),
+      );
+
+  static ThemeData get darkTheme => ThemeData(
+        useMaterial3: true,
+        colorScheme: ColorScheme.dark(
+          primary: const Color(0xFF00B894),
+          secondary: const Color(0xFF6C5CE7),
+          tertiary: const Color(0xFF00B894),
+          surface: const Color(0xFF2D3436),
+          background: const Color(0xFF1A1A1A),
+          error: const Color(0xFFFF3B30),
+        ),
+        textTheme: TextTheme(
+          displayLarge: GoogleFonts.poppins(
+            fontSize: 42,
+            fontWeight: FontWeight.w800,
+            letterSpacing: -1,
+            color: Colors.white,
+          ),
+          displayMedium: GoogleFonts.poppins(
+            fontSize: 32,
+            fontWeight: FontWeight.w700,
+            letterSpacing: -0.5,
+            color: Colors.white,
+          ),
+          bodyLarge: GoogleFonts.inter(
+            fontSize: 17,
+            fontWeight: FontWeight.w500,
+            letterSpacing: -0.24,
+            color: Colors.white,
+          ),
+          bodyMedium: GoogleFonts.inter(
+            fontSize: 15,
+            fontWeight: FontWeight.w400,
+            letterSpacing: -0.24,
+            color: Colors.white,
+          ),
+        ),
+        cardTheme: CardTheme(
+          elevation: 0,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(16),
+          ),
+          color: const Color(0xFF2D3436),
+        ),
+        appBarTheme: AppBarTheme(
+          elevation: 0,
+          centerTitle: true,
+          backgroundColor: Colors.transparent,
           foregroundColor: Colors.white,
           titleTextStyle: GoogleFonts.poppins(
             fontSize: 20,
@@ -68,8 +120,28 @@ class MyApp extends StatelessWidget {
             color: Colors.white,
           ),
         ),
-      ),
-      home: const HomeScreen(),
+      );
+}
+
+void main() {
+  runApp(const MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return ValueListenableBuilder<bool>(
+      valueListenable: AppTheme.isDarkModeNotifier,
+      builder: (context, isDark, child) {
+        return MaterialApp(
+          title: 'Certify App',
+          debugShowCheckedModeBanner: false,
+          theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
+          home: const HomeScreen(),
+        );
+      },
     );
   }
 }
@@ -90,6 +162,8 @@ class _HomeScreenState extends State<HomeScreen>
   final List<Widget> _screens = [
     const DashboardScreen(),
     const CertificatesScreen(),
+    const UploadScreen(),
+    const CreateCertificateScreen(),
     const ProfileScreen(),
   ];
 
@@ -110,6 +184,8 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+
     return Scaffold(
       key: _scaffoldKey,
       extendBodyBehindAppBar: true,
@@ -170,7 +246,7 @@ class _HomeScreenState extends State<HomeScreen>
       ),
       bottomNavigationBar: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: isDark ? Colors.grey[900] : Colors.white,
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.1),
@@ -181,14 +257,15 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 12),
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
-                _buildNavItem(0, Icons.home_outlined, Icons.home, 'Home'),
-                _buildNavItem(1, Icons.assignment_outlined, Icons.assignment,
-                    'Certificates'),
-                _buildNavItem(2, Icons.person_outline, Icons.person, 'Profile'),
+                _buildNavItem(0, Icons.dashboard_outlined, 'Dashboard'),
+                _buildNavItem(1, Icons.article_outlined, 'Certificates'),
+                _buildNavItem(2, Icons.upload_file_outlined, 'Upload'),
+                _buildNavItem(3, Icons.add_circle_outline, 'Create'),
+                _buildNavItem(4, Icons.person_outline, 'Profile'),
               ],
             ),
           ),
@@ -197,60 +274,36 @@ class _HomeScreenState extends State<HomeScreen>
     );
   }
 
-  Widget _buildNavItem(
-    int index,
-    IconData outlineIcon,
-    IconData filledIcon,
-    String label,
-  ) {
+  Widget _buildNavItem(int index, IconData icon, String label) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
     final isSelected = _currentIndex == index;
+    final color = isSelected
+        ? (isDark ? Colors.blue[300] : Colors.blue[700])
+        : (isDark ? Colors.grey[400] : Colors.grey[600]);
+
     return GestureDetector(
-      onTap: () {
-        setState(() => _currentIndex = index);
-        _animationController.forward(from: 0);
-      },
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 200),
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+      onTap: () => setState(() => _currentIndex = index),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
         decoration: BoxDecoration(
           color: isSelected
-              ? Theme.of(context).colorScheme.secondary.withOpacity(0.1)
+              ? (isDark ? Colors.blue[900]?.withOpacity(0.2) : Colors.blue[50])
               : Colors.transparent,
-          borderRadius: BorderRadius.circular(30),
-          boxShadow: isSelected
-              ? [
-                  BoxShadow(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .secondary
-                        .withOpacity(0.3),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
+          borderRadius: BorderRadius.circular(12),
         ),
-        child: Row(
+        child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(
-              isSelected ? filledIcon : outlineIcon,
-              color: isSelected
-                  ? Theme.of(context).colorScheme.secondary
-                  : Colors.grey,
-              size: 24,
-            ),
-            if (isSelected) ...[
-              const SizedBox(width: 8),
-              Text(
-                label,
-                style: GoogleFonts.inter(
-                  color: Theme.of(context).colorScheme.secondary,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
+            Icon(icon, color: color),
+            const SizedBox(height: 4),
+            Text(
+              label,
+              style: GoogleFonts.inter(
+                fontSize: 12,
+                color: color,
+                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
               ),
-            ],
+            ),
           ],
         ),
       ),
@@ -263,6 +316,9 @@ class DashboardScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
@@ -280,7 +336,11 @@ class DashboardScreen extends StatelessWidget {
                   opacity: value,
                   child: Text(
                     'Welcome back!',
-                    style: Theme.of(context).textTheme.displayMedium?.copyWith(
+                    style: GoogleFonts.inter(
+                      fontSize: 32,
+                      fontWeight: FontWeight.w700,
+                      letterSpacing: -0.5,
+                      color: textColor,
                       shadows: [
                         Shadow(
                           color: Colors.black.withOpacity(0.3),
@@ -308,14 +368,24 @@ class DashboardScreen extends StatelessWidget {
                 Icons.add_circle_outline,
                 'Create',
                 const Color(0xFF00B894), // Mint green
-                () => debugPrint('Create tapped'),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CreateCertificateScreen(),
+                  ),
+                ),
               ),
               _buildActionCard(
                 context,
                 Icons.upload_outlined,
                 'Upload',
                 const Color(0xFF6C5CE7), // Purple
-                () => debugPrint('Upload tapped'),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const UploadScreen(),
+                  ),
+                ),
               ),
               _buildActionCard(
                 context,
@@ -340,6 +410,16 @@ class DashboardScreen extends StatelessWidget {
           ),
           const SizedBox(height: 40),
           // Recent Activity with Glass Effect
+          Text(
+            'Recent Activity',
+            style: GoogleFonts.inter(
+              fontSize: 20,
+              fontWeight: FontWeight.w600,
+              letterSpacing: -0.24,
+              color: textColor,
+            ),
+          ),
+          const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
@@ -356,14 +436,6 @@ class DashboardScreen extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'Recent Activity',
-                  style: Theme.of(context).textTheme.displayMedium?.copyWith(
-                        fontSize: 24,
-                        color: Theme.of(context).colorScheme.primary,
-                      ),
-                ),
-                const SizedBox(height: 20),
                 ListView.separated(
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
@@ -386,55 +458,56 @@ class DashboardScreen extends StatelessWidget {
     IconData icon,
     String title,
     Color color,
-    VoidCallback? onTap,
+    VoidCallback onTap,
   ) {
-    return MouseRegion(
-      cursor: SystemMouseCursors.click,
-      child: TweenAnimationBuilder(
-        tween: Tween<double>(begin: 0, end: 1),
-        duration: const Duration(milliseconds: 200),
-        builder: (context, double value, child) {
-          return Transform.scale(
-            scale: 0.95 + (0.05 * value),
-            child: Card(
-              elevation: 4,
-              shadowColor: color.withOpacity(0.2),
-              child: InkWell(
-                onTap: onTap,
-                borderRadius: BorderRadius.circular(16),
-                child: Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: [
-                        color.withOpacity(0.1),
-                        color.withOpacity(0.05),
-                      ],
-                    ),
-                  ),
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(icon, size: 36, color: color),
-                      const SizedBox(height: 16),
-                      Text(
-                        title,
-                        style: GoogleFonts.inter(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
-                          color: color,
-                        ),
-                      ),
-                    ],
-                  ),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(20),
+        child: Container(
+          padding: const EdgeInsets.all(20),
+          decoration: BoxDecoration(
+            color: isDark ? Colors.grey[900] : Colors.white,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 15,
+                spreadRadius: 5,
+                offset: const Offset(0, 5),
+              ),
+            ],
+          ),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(icon, color: color, size: 32),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                title,
+                style: GoogleFonts.inter(
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                  color: textColor,
                 ),
               ),
-            ),
-          );
-        },
+            ],
+          ),
+        ),
       ),
     );
   }
@@ -673,8 +746,7 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      const PlaceholderScreen(title: 'Security'),
+                  builder: (context) => const SecurityScreen(),
                 ),
               ),
             ),
@@ -701,7 +773,7 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) => const PlaceholderScreen(title: 'About'),
+                  builder: (context) => const AboutScreen(),
                 ),
               ),
             ),
@@ -713,8 +785,7 @@ class SettingsScreen extends StatelessWidget {
               onTap: () => Navigator.push(
                 context,
                 MaterialPageRoute(
-                  builder: (context) =>
-                      const PlaceholderScreen(title: 'Help & Support'),
+                  builder: (context) => const HelpSupportScreen(),
                 ),
               ),
             ),
@@ -766,18 +837,19 @@ class SettingsScreen extends StatelessWidget {
       ),
       title: Text(
         title,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
+        style: Theme.of(context).textTheme.bodyLarge?.copyWith(
+              fontWeight: FontWeight.w600,
+            ),
       ),
       subtitle: Text(
         subtitle,
-        style: Theme.of(
-          context,
-        ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
+        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.6),
+            ),
       ),
       trailing: onTap != null
-          ? Icon(Icons.chevron_right, color: Colors.grey[400])
+          ? Icon(Icons.chevron_right,
+              color: Theme.of(context).colorScheme.onSurface.withOpacity(0.4))
           : null,
       onTap: onTap,
     );
@@ -848,20 +920,6 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   }
 }
 
-class PlaceholderScreen extends StatelessWidget {
-  const PlaceholderScreen({super.key, required this.title});
-
-  final String title;
-
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      appBar: AppBar(title: Text(title), centerTitle: true),
-      body: Center(child: Text("This is the $title screen.")),
-    );
-  }
-}
-
 class ThemeScreen extends StatefulWidget {
   const ThemeScreen({super.key});
 
@@ -870,8 +928,6 @@ class ThemeScreen extends StatefulWidget {
 }
 
 class _ThemeScreenState extends State<ThemeScreen> {
-  bool _isDarkMode = false;
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -884,13 +940,123 @@ class _ThemeScreenState extends State<ThemeScreen> {
             child: SwitchListTile(
               title: const Text('Dark Mode'),
               subtitle: const Text('Enable dark mode.'),
-              value: _isDarkMode,
+              value: AppTheme.isDarkMode,
               onChanged: (bool value) {
-                setState(() {
-                  _isDarkMode = value;
-                });
-                debugPrint('Theme toggled: ${_isDarkMode ? "Dark" : "Light"}');
+                AppTheme.isDarkMode = value;
+                AppTheme.isDarkModeNotifier.value = value;
               },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SecurityScreen extends StatelessWidget {
+  const SecurityScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      appBar: AppBar(title: const Text('Security')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.lock_outline),
+                  title: const Text('Change Password'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    // Implement password change
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.fingerprint),
+                  title: const Text('Biometric Authentication'),
+                  trailing: Switch(
+                    value: false,
+                    onChanged: (value) {
+                      // Implement biometric toggle
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class AboutScreen extends StatelessWidget {
+  const AboutScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      appBar: AppBar(title: const Text('About')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            const Icon(Icons.verified, size: 64),
+            const SizedBox(height: 16),
+            Text(
+              'Certify App',
+              style: Theme.of(context).textTheme.displayMedium,
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Version 1.0.0',
+              style: Theme.of(context).textTheme.bodyLarge,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class HelpSupportScreen extends StatelessWidget {
+  const HelpSupportScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Theme.of(context).colorScheme.background,
+      appBar: AppBar(title: const Text('Help & Support')),
+      body: ListView(
+        padding: const EdgeInsets.all(16),
+        children: [
+          Card(
+            child: Column(
+              children: [
+                ListTile(
+                  leading: const Icon(Icons.help_outline),
+                  title: const Text('FAQ'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    // Navigate to FAQ
+                  },
+                ),
+                const Divider(height: 1),
+                ListTile(
+                  leading: const Icon(Icons.email_outlined),
+                  title: const Text('Contact Support'),
+                  trailing: const Icon(Icons.chevron_right),
+                  onTap: () {
+                    // Open email client
+                  },
+                ),
+              ],
             ),
           ),
         ],
