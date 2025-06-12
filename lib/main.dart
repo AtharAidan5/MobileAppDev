@@ -11,7 +11,7 @@ class AppTheme {
   static ThemeData get lightTheme => ThemeData(
         useMaterial3: true,
         colorScheme: ColorScheme.light(
-          primary: const Color(0xFF2D3436),
+          primary: const Color(0xFF1A1A1A),
           secondary: const Color(0xFF00B894),
           tertiary: const Color(0xFF6C5CE7),
           surface: Colors.white,
@@ -23,25 +23,25 @@ class AppTheme {
             fontSize: 42,
             fontWeight: FontWeight.w800,
             letterSpacing: -1,
-            color: const Color(0xFF2D3436),
+            color: const Color(0xFF1A1A1A),
           ),
           displayMedium: GoogleFonts.poppins(
             fontSize: 32,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
-            color: const Color(0xFF2D3436),
+            color: const Color(0xFF1A1A1A),
           ),
           bodyLarge: GoogleFonts.inter(
             fontSize: 17,
             fontWeight: FontWeight.w500,
             letterSpacing: -0.24,
-            color: const Color(0xFF2D3436),
+            color: const Color(0xFF1A1A1A),
           ),
           bodyMedium: GoogleFonts.inter(
             fontSize: 15,
             fontWeight: FontWeight.w400,
             letterSpacing: -0.24,
-            color: const Color(0xFF2D3436),
+            color: const Color(0xFF1A1A1A),
           ),
         ),
         cardTheme: CardTheme(
@@ -55,12 +55,12 @@ class AppTheme {
           elevation: 0,
           centerTitle: true,
           backgroundColor: Colors.transparent,
-          foregroundColor: const Color(0xFF2D3436),
+          foregroundColor: Colors.white,
           titleTextStyle: GoogleFonts.poppins(
             fontSize: 20,
             fontWeight: FontWeight.w700,
             letterSpacing: -0.5,
-            color: const Color(0xFF2D3436),
+            color: Colors.white,
           ),
         ),
       );
@@ -317,14 +317,15 @@ class DashboardScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black87;
+    final textColor = isDark ? Colors.white : Colors.white;
+    final subtitleColor = isDark ? Colors.grey[400] : Colors.grey[700];
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const SizedBox(height: 100), // Space for app bar
+          const SizedBox(height: 100),
           // Welcome Text with 3D Effect
           TweenAnimationBuilder(
             tween: Tween<double>(begin: 0, end: 1),
@@ -340,10 +341,12 @@ class DashboardScreen extends StatelessWidget {
                       fontSize: 32,
                       fontWeight: FontWeight.w700,
                       letterSpacing: -0.5,
-                      color: textColor,
+                      color: Colors.white,
                       shadows: [
                         Shadow(
-                          color: Colors.black.withOpacity(0.3),
+                          color: isDark
+                              ? Colors.black.withOpacity(0.3)
+                              : Colors.black.withOpacity(0.2),
                           offset: const Offset(0, 2),
                           blurRadius: 4,
                         ),
@@ -367,7 +370,7 @@ class DashboardScreen extends StatelessWidget {
                 context,
                 Icons.add_circle_outline,
                 'Create',
-                const Color(0xFF00B894), // Mint green
+                const Color(0xFF00B894),
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -379,7 +382,7 @@ class DashboardScreen extends StatelessWidget {
                 context,
                 Icons.upload_outlined,
                 'Upload',
-                const Color(0xFF6C5CE7), // Purple
+                const Color(0xFF6C5CE7),
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -391,14 +394,14 @@ class DashboardScreen extends StatelessWidget {
                 context,
                 Icons.share_outlined,
                 'Share',
-                const Color(0xFF00B894), // Mint green
+                const Color(0xFF00B894),
                 () => debugPrint('Share tapped'),
               ),
               _buildActionCard(
                 context,
                 Icons.settings_outlined,
                 'Settings',
-                const Color(0xFF6C5CE7), // Purple
+                const Color(0xFF6C5CE7),
                 () => Navigator.push(
                   context,
                   MaterialPageRoute(
@@ -416,20 +419,24 @@ class DashboardScreen extends StatelessWidget {
               fontSize: 20,
               fontWeight: FontWeight.w600,
               letterSpacing: -0.24,
-              color: textColor,
+              color: Colors.white,
             ),
           ),
           const SizedBox(height: 16),
           Container(
             padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
-              color: Colors.white.withOpacity(0.9),
-              borderRadius: BorderRadius.circular(16),
+              color: isDark ? Colors.grey[900] : Colors.white,
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: isDark ? Colors.grey[800]! : Colors.grey[200]!,
+              ),
               boxShadow: [
                 BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 20,
-                  offset: const Offset(0, 10),
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 15,
+                  spreadRadius: 5,
+                  offset: const Offset(0, 5),
                 ),
               ],
             ),
@@ -440,10 +447,40 @@ class DashboardScreen extends StatelessWidget {
                   shrinkWrap: true,
                   physics: const NeverScrollableScrollPhysics(),
                   itemCount: 3,
-                  separatorBuilder: (context, index) =>
-                      const Divider(height: 20),
-                  itemBuilder: (context, index) =>
-                      _buildActivityCard(context, index),
+                  separatorBuilder: (context, index) => Divider(
+                    color: isDark ? Colors.grey[800] : Colors.grey[200],
+                  ),
+                  itemBuilder: (context, index) {
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: Container(
+                        width: 40,
+                        height: 40,
+                        decoration: BoxDecoration(
+                          color: isDark ? Colors.grey[800] : Colors.grey[200],
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(
+                          Icons.verified,
+                          color: isDark ? Colors.blue[400] : Colors.blue[600],
+                        ),
+                      ),
+                      title: Text(
+                        'Certificate ${index + 1}',
+                        style: GoogleFonts.inter(
+                          color: isDark ? Colors.white : Colors.grey[800],
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      subtitle: Text(
+                        'Created ${index + 1} days ago',
+                        style: GoogleFonts.inter(
+                          color: subtitleColor,
+                          fontSize: 12,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),
@@ -461,7 +498,7 @@ class DashboardScreen extends StatelessWidget {
     VoidCallback onTap,
   ) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.black87;
+    final textColor = isDark ? Colors.white : const Color(0xFF1A1A1A);
 
     return Material(
       color: Colors.transparent,
@@ -509,77 +546,6 @@ class DashboardScreen extends StatelessWidget {
           ),
         ),
       ),
-    );
-  }
-
-  Widget _buildActivityCard(BuildContext context, int index) {
-    return TweenAnimationBuilder(
-      tween: Tween<double>(begin: 0, end: 1),
-      duration: Duration(milliseconds: 500 + (index * 100)),
-      builder: (context, double value, child) {
-        return Transform.translate(
-          offset: Offset(20 * (1 - value), 0),
-          child: Opacity(
-            opacity: value,
-            child: Row(
-              children: [
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .secondary
-                        .withOpacity(0.1),
-                    borderRadius: BorderRadius.circular(12),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .secondary
-                            .withOpacity(0.1),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: Icon(
-                    Icons.assignment_turned_in,
-                    color: Theme.of(context).colorScheme.secondary,
-                    size: 24,
-                  ),
-                ),
-                const SizedBox(width: 16),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Certificate ${index + 1}',
-                        style: GoogleFonts.inter(
-                          fontSize: 16,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Issued on 2023-06-01',
-                        style: GoogleFonts.inter(
-                          fontSize: 14,
-                          color: Colors.grey[600],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-                Icon(
-                  Icons.chevron_right,
-                  color: Colors.grey[400],
-                ),
-              ],
-            ),
-          ),
-        );
-      },
     );
   }
 }
@@ -638,6 +604,9 @@ class ProfileScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.white;
+
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
       child: Column(
@@ -659,7 +628,14 @@ class ProfileScreen extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 24),
-          Text('Athar Aidan', style: Theme.of(context).textTheme.displayMedium),
+          Text(
+            'Athar Aidan',
+            style: GoogleFonts.inter(
+              fontSize: 24,
+              fontWeight: FontWeight.w600,
+              color: Colors.white,
+            ),
+          ),
           const SizedBox(height: 8),
           Text(
             '123456@student.upm.edu.my',
