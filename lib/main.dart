@@ -77,14 +77,38 @@ class DashboardScreen extends StatelessWidget {
             crossAxisSpacing: 16,
             mainAxisSpacing: 16,
             children: [
-              _buildActionCard(context, Icons.add, 'Create', Colors.blue),
-              _buildActionCard(context, Icons.upload, 'Upload', Colors.green),
-              _buildActionCard(context, Icons.share, 'Share', Colors.orange),
+              _buildActionCard(
+                context,
+                Icons.add,
+                'Create',
+                Colors.blue,
+                () => debugPrint('Create tapped'),
+              ),
+              _buildActionCard(
+                context,
+                Icons.upload,
+                'Upload',
+                Colors.green,
+                () => debugPrint('Upload tapped'),
+              ),
+              _buildActionCard(
+                context,
+                Icons.share,
+                'Share',
+                Colors.orange,
+                () => debugPrint('Share tapped'),
+              ),
               _buildActionCard(
                 context,
                 Icons.settings,
                 'Settings',
                 Colors.purple,
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SettingsScreen(),
+                  ),
+                ),
               ),
             ],
           ),
@@ -117,11 +141,12 @@ class DashboardScreen extends StatelessWidget {
     IconData icon,
     String title,
     Color color,
+    VoidCallback? onTap,
   ) {
     return Card(
       elevation: 2,
       child: InkWell(
-        onTap: () => debugPrint('$title tapped'),
+        onTap: onTap,
         borderRadius: BorderRadius.circular(8),
         child: Padding(
           padding: const EdgeInsets.all(16),
@@ -185,6 +210,211 @@ class ProfileScreen extends StatelessWidget {
           ElevatedButton(
             onPressed: () => debugPrint('Logout pressed'),
             child: const Text('Logout'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class SettingsScreen extends StatelessWidget {
+  const SettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Settings'), centerTitle: true),
+      body: ListView(
+        children: [
+          _buildSettingsTile(
+            context,
+            Icons.notifications,
+            'Notifications',
+            'Manage your notification preferences.',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const NotificationsScreen(),
+                  ),
+                ),
+          ),
+          _buildSettingsTile(
+            context,
+            Icons.security,
+            'Security',
+            'Change password and security settings.',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => const PlaceholderScreen(title: 'Security'),
+                  ),
+                ),
+          ),
+          _buildSettingsTile(
+            context,
+            Icons.color_lens,
+            'Theme',
+            'Adjust app theme and appearance.',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const ThemeScreen()),
+                ),
+          ),
+          _buildSettingsTile(
+            context,
+            Icons.info,
+            'About',
+            'Information about Certify App.',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) => const PlaceholderScreen(title: 'About'),
+                  ),
+                ),
+          ),
+          _buildSettingsTile(
+            context,
+            Icons.help,
+            'Help & Support',
+            'Get help or contact support.',
+            onTap:
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder:
+                        (context) =>
+                            const PlaceholderScreen(title: 'Help & Support'),
+                  ),
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildSettingsTile(
+    BuildContext context,
+    IconData icon,
+    String title,
+    String subtitle, {
+    VoidCallback? onTap,
+  }) {
+    return Card(
+      margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      elevation: 1,
+      child: ListTile(
+        leading: Icon(icon, color: Theme.of(context).primaryColor),
+        title: Text(title),
+        subtitle: Text(subtitle),
+        trailing: onTap != null ? const Icon(Icons.chevron_right) : null,
+        onTap: onTap,
+      ),
+    );
+  }
+}
+
+// New NotificationsScreen (a StatefulWidget) for the Notifications tile
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key});
+
+  @override
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
+}
+
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  bool _enableNotifications = true;
+  bool _enableEmailNotifications = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text("Notifications"), centerTitle: true),
+      body: ListView(
+        children: [
+          SwitchListTile(
+            title: const Text("Enable Notifications"),
+            subtitle: const Text(
+              "Receive notifications for new certificates and updates.",
+            ),
+            value: _enableNotifications,
+            onChanged: (bool value) {
+              setState(() {
+                _enableNotifications = value;
+              });
+            },
+          ),
+          SwitchListTile(
+            title: const Text("Email Notifications"),
+            subtitle: const Text("Receive notifications via email."),
+            value: _enableEmailNotifications,
+            onChanged: (bool value) {
+              setState(() {
+                _enableEmailNotifications = value;
+              });
+            },
+          ),
+          if (_enableEmailNotifications)
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              child: Text(
+                'Emails will be sent to this address: 123456@student.upm.edu.my',
+                style: TextStyle(color: Colors.grey[700]),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// New PlaceholderScreen (a StatelessWidget) for other settings tiles (Security, Theme, About, Help & Support)
+class PlaceholderScreen extends StatelessWidget {
+  const PlaceholderScreen({super.key, required this.title});
+
+  final String title;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text(title), centerTitle: true),
+      body: Center(child: Text("This is the $title screen.")),
+    );
+  }
+}
+
+// New ThemeScreen (a StatefulWidget) for the Theme tile
+class ThemeScreen extends StatefulWidget {
+  const ThemeScreen({super.key});
+
+  @override
+  State<ThemeScreen> createState() => _ThemeScreenState();
+}
+
+class _ThemeScreenState extends State<ThemeScreen> {
+  bool _isDarkMode = false;
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Theme'), centerTitle: true),
+      body: ListView(
+        children: [
+          SwitchListTile(
+            title: const Text('Dark Mode'),
+            subtitle: const Text('Enable dark mode.'),
+            value: _isDarkMode,
+            onChanged: (bool value) {
+              setState(() {
+                _isDarkMode = value;
+              });
+              debugPrint('Theme toggled: ${_isDarkMode ? "Dark" : "Light"}');
+            },
           ),
         ],
       ),
