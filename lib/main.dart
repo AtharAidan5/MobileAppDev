@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:share_plus/share_plus.dart';
 import 'upload_screen.dart';
 import 'create_certificate_screen.dart';
 
@@ -552,6 +553,12 @@ class DashboardScreen extends StatelessWidget {
 
 class CertificatesScreen extends StatelessWidget {
   const CertificatesScreen({super.key});
+
+  // Added share method
+  void _shareCertificate(BuildContext context, String certificateName) {
+    final text = 'Check out my certificate "$certificateName" on Certify App!';
+    Share.share(text);
+  }
 
   @override
   Widget build(BuildContext context) {
