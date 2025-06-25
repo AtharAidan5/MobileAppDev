@@ -3,6 +3,10 @@ import 'package:google_fonts/google_fonts.dart';
 import 'package:share_plus/share_plus.dart';
 import 'upload_screen.dart';
 import 'create_certificate_screen.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'services/firestore_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 // Theme management
 class AppTheme {
@@ -124,7 +128,9 @@ class AppTheme {
       );
 }
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
   runApp(const MyApp());
 }
 
@@ -271,6 +277,24 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
         ),
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () async {
+          await FirestoreService().addCertificate({
+            'name': 'Test Certificate',
+            'recipient': 'Test User',
+            'organization': 'Test Org',
+            'purpose': 'Testing Firestore',
+            'issuedDate': Timestamp.fromDate(DateTime.now()),
+            'expiryDate': null,
+            'signature': 'Test Signature',
+          });
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Sample certificate added!')),
+          );
+        },
+        child: const Icon(Icons.add),
+        tooltip: 'Add Sample Certificate',
       ),
     );
   }
@@ -554,54 +578,39 @@ class DashboardScreen extends StatelessWidget {
 class CertificatesScreen extends StatelessWidget {
   const CertificatesScreen({super.key});
 
-  // Added share method
-  void _shareCertificate(BuildContext context, String certificateName) {
-    final text = 'Check out my certificate "$certificateName" on Certify App!';
-    Share.share(text);
-  }
-
   @override
   Widget build(BuildContext context) {
-    return ListView.builder(
-      padding: const EdgeInsets.all(16),
-      itemCount: 5,
-      itemBuilder: (context, index) => _buildCertificateCard(context, index),
-    );
-  }
-
-  Widget _buildCertificateCard(BuildContext context, int index) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
-      child: ListTile(
-        contentPadding: const EdgeInsets.all(16),
-        leading: Container(
-          padding: const EdgeInsets.all(8),
-          decoration: BoxDecoration(
-            color: Theme.of(context).colorScheme.primary.withOpacity(0.1),
-            borderRadius: BorderRadius.circular(8),
-          ),
-          child: Icon(
-            Icons.verified,
-            color: Theme.of(context).colorScheme.primary,
-          ),
-        ),
-        title: Text(
-          'Certificate ${index + 1}',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyLarge?.copyWith(fontWeight: FontWeight.w600),
-        ),
-        subtitle: Text(
-          'Organization: UPM',
-          style: Theme.of(
-            context,
-          ).textTheme.bodyMedium?.copyWith(color: Colors.grey[600]),
-        ),
-        trailing: IconButton(
-          icon: const Icon(Icons.more_vert),
-          onPressed: () {},
-        ),
-      ),
+    return StreamBuilder(
+      stream: FirestoreService().getCertificates(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+          return const Center(child: Text('No certificates found.'));
+        }
+        final docs = snapshot.data!.docs;
+        return ListView.builder(
+          padding: const EdgeInsets.all(16),
+          itemCount: docs.length,
+          itemBuilder: (context, index) {
+            final data = docs[index].data() as Map<String, dynamic>;
+            return Card(
+              margin: const EdgeInsets.only(bottom: 16),
+              child: ListTile(
+                contentPadding: const EdgeInsets.all(16),
+                leading: Icon(Icons.verified,
+                    color: Theme.of(context).colorScheme.primary),
+                title: Text(data['name'] ?? 'No Name'),
+                subtitle: Text(
+                  'Recipient: ${data['recipient'] ?? ''}\nOrganization: ${data['organization'] ?? ''}',
+                  style: Theme.of(context).textTheme.bodyMedium,
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }
