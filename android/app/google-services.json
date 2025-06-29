@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "1048872239121",
+    "project_id": "certify-22b32",
+    "storage_bucket": "certify-22b32.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1048872239121:android:d95bd24f2f8a98aac931b0",
+        "android_client_info": {
+          "package_name": "com.example.certify_hub"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCMESdRvvXwEzRcCGSAdHoxjboaT_eVZqU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
