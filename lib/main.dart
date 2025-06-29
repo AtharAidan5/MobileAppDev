@@ -12,8 +12,6 @@ import 'services/auth_service.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:url_launcher/url_launcher.dart';
-import 'dart:io';
-import 'services/storage_service.dart';
 import 'services/pdf_storage_service.dart';
 import 'package:flutter_pdfview/flutter_pdfview.dart';
 
@@ -988,6 +986,10 @@ class _CertificateViewerScreenState extends State<CertificateViewerScreen> {
         );
         return Scaffold(
           appBar: AppBar(
+            leading: IconButton(
+              icon: const Icon(Icons.arrow_back),
+              onPressed: () => Navigator.of(context).pop(),
+            ),
             title: Text('Certificate Viewer',
                 style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
             centerTitle: true,
@@ -1423,7 +1425,6 @@ class ProfileScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
-    final textColor = isDark ? Colors.white : Colors.white;
     final currentUser = AuthService().currentUser;
 
     return SingleChildScrollView(
@@ -1558,8 +1559,32 @@ class ProfileScreen extends StatelessWidget {
           _buildProfileButton(
             context,
             Icons.logout,
-            'Logout',
-            () => debugPrint('Logout pressed'),
+            'Sign Out',
+            () async {
+              try {
+                await AuthService().signOut();
+                // Clear user provider data
+                Provider.of<UserProvider>(context, listen: false).clear();
+                // Show success message
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(
+                      content: Text('Signed out successfully'),
+                      backgroundColor: Colors.green,
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error signing out: $e'),
+                      backgroundColor: Colors.red,
+                    ),
+                  );
+                }
+              }
+            },
             isDestructive: true,
           ),
         ],
@@ -1601,7 +1626,9 @@ class SettingsScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(title: const Text('Settings')),
+      appBar: AppBar(
+        title: const Text('Settings'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1751,7 +1778,13 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(title: const Text("Notifications")),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text("Notifications"),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1812,7 +1845,13 @@ class _ThemeScreenState extends State<ThemeScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(title: const Text('Theme')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('Theme'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1833,14 +1872,25 @@ class _ThemeScreenState extends State<ThemeScreen> {
   }
 }
 
-class SecurityScreen extends StatelessWidget {
+class SecurityScreen extends StatefulWidget {
   const SecurityScreen({super.key});
 
+  @override
+  State<SecurityScreen> createState() => _SecurityScreenState();
+}
+
+class _SecurityScreenState extends State<SecurityScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(title: const Text('Security')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('Security'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1882,7 +1932,13 @@ class AboutScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(title: const Text('About')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('About'),
+      ),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -1912,7 +1968,13 @@ class HelpSupportScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Theme.of(context).colorScheme.background,
-      appBar: AppBar(title: const Text('Help & Support')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('Help & Support'),
+      ),
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
@@ -1952,7 +2014,13 @@ class AdminPanelScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Admin Panel')),
+      appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
+        title: const Text('Admin Panel'),
+      ),
       body: StreamBuilder<QuerySnapshot>(
         stream: FirebaseFirestore.instance.collection('users').snapshots(),
         builder: (context, snapshot) {
@@ -2036,6 +2104,10 @@ class ApprovalScreen extends StatelessWidget {
     final borderColor = isDark ? Colors.grey[700]! : Colors.grey[300]!;
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text('Pending Approvals',
             style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
         centerTitle: true,
@@ -2247,6 +2319,10 @@ class _AdminSetupScreenState extends State<AdminSetupScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: const Text('Admin Setup'),
         backgroundColor: Colors.transparent,
         elevation: 0,

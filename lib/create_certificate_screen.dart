@@ -273,6 +273,10 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
 
     return Scaffold(
       appBar: AppBar(
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => Navigator.of(context).pop(),
+        ),
         title: Text(
           "Create Certificate",
           style: GoogleFonts.inter(

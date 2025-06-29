@@ -15,7 +15,15 @@ const admin = require('firebase-admin');
 const sgMail = require('@sendgrid/mail');
 
 admin.initializeApp();
-sgMail.setApiKey(process.env.SENDGRID_API_KEY); // Only use env variable, no fallback
+
+// SendGrid API Key Configuration
+// For development: Use environment variable or direct key
+// For production: Always use environment variables
+const sendGridApiKey = process.env.SENDGRID_API_KEY || 'YOUR_SENDGRID_API_KEY';
+sgMail.setApiKey(sendGridApiKey);
+
+// TODO: For production deployment, set environment variable:
+// firebase functions:config:set sendgrid.api_key="YOUR_SENDGRID_API_KEY"
 
 exports.sendCertificateStatusEmail = functions.firestore
   .document('certificates/{certId}')
@@ -32,9 +40,19 @@ exports.sendCertificateStatusEmail = functions.firestore
 
     const msg = {
       to: recipientEmail,
-      from: 'noreply@yourdomain.com', // Use your verified sender
-      subject: `Your certificate "${after.name}" was ${after.status}`,
-      text: `Hello,\n\nYour certificate "${after.name}" has been ${after.status}.\n\nYou can view it here: https://yourapp.com/view/${after.shareToken}\n\nBest regards,\nCertify App Team`,
+      from: 'noreply@certifyapp.com', // Update this to your verified sender domain
+      subject: `Certificate Status Update: "${after.name}"`,
+      text: `Hello,\n\nYour certificate "${after.name}" has been ${after.status}.\n\nYou can view it here: https://certifyapp.com/view/${after.shareToken}\n\nBest regards,\nCertify App Team`,
+      html: `
+        <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+          <h2 style="color: #333;">Certificate Status Update</h2>
+          <p>Hello,</p>
+          <p>Your certificate <strong>"${after.name}"</strong> has been <strong>${after.status}</strong>.</p>
+          <p>You can view your certificate by clicking the link below:</p>
+          <a href="https://certifyapp.com/view/${after.shareToken}" style="background-color: #007bff; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; display: inline-block;">View Certificate</a>
+          <p style="margin-top: 20px;">Best regards,<br>Certify App Team</p>
+        </div>
+      `,
     };
 
     try {
