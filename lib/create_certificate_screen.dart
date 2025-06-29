@@ -2,6 +2,9 @@ import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'services/firestore_service.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:image_picker/image_picker.dart';
+import 'dart:io';
+import 'services/pdf_storage_service.dart';
 
 class CreateCertificateScreen extends StatefulWidget {
   const CreateCertificateScreen({super.key});
@@ -16,10 +19,15 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
   final TextEditingController _recipientController = TextEditingController();
   final TextEditingController _organizationController = TextEditingController();
   final TextEditingController _purposeController = TextEditingController();
+  final TextEditingController _recipientEmailController =
+      TextEditingController();
 
   DateTime? _issuedDate;
   DateTime? _expiryDate;
   String? _signatureText = "CA Signature";
+  File? _signatureImage;
+  bool _generatingPdf = false;
+  bool _generatePdf = true; // Toggle for PDF generation
 
   Future<void> _selectDate(BuildContext context, bool isIssueDate) async {
     final DateTime? picked = await showDatePicker(
@@ -51,10 +59,44 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
     }
   }
 
+  Future<void> _pickSignatureImage() async {
+    final picker = ImagePicker();
+    final picked = await picker.pickImage(source: ImageSource.gallery);
+    if (picked != null) {
+      setState(() {
+        _signatureImage = File(picked.path);
+      });
+    }
+  }
+
   void _saveCertificate() async {
+    // Metadata validation
+    if (_nameController.text.trim().isEmpty ||
+        _recipientController.text.trim().isEmpty ||
+        _recipientEmailController.text.trim().isEmpty ||
+        _organizationController.text.trim().isEmpty ||
+        _purposeController.text.trim().isEmpty ||
+        _issuedDate == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Please fill in all required fields.',
+              style: GoogleFonts.inter()),
+          backgroundColor: Colors.red,
+        ),
+      );
+      return;
+    }
+
+    setState(() {
+      _generatingPdf = true;
+    });
+
+    final firestoreService = FirestoreService();
+
     final data = {
       'name': _nameController.text,
       'recipient': _recipientController.text,
+      'recipientEmail': _recipientEmailController.text,
       'organization': _organizationController.text,
       'purpose': _purposeController.text,
       'issuedDate':
@@ -62,21 +104,165 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
       'expiryDate':
           _expiryDate != null ? Timestamp.fromDate(_expiryDate!) : null,
       'signature': _signatureText ?? '',
+      'status': 'pending',
+      'approver': null,
+      'approvalDate': null,
+      'shareToken': firestoreService.generateShareToken(),
+      'createdAt': FieldValue.serverTimestamp(),
     };
-    await FirestoreService().addCertificate(data);
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(
-          'Certificate saved!',
-          style: GoogleFonts.inter(),
+
+    try {
+      // Show progress dialog
+      showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (BuildContext context) {
+          return AlertDialog(
+            title: Text('Saving Certificate', style: GoogleFonts.inter()),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(),
+                const SizedBox(height: 16),
+                Text(
+                  'Generating PDF and uploading...',
+                  style: GoogleFonts.inter(),
+                  textAlign: TextAlign.center,
+                ),
+              ],
+            ),
+          );
+        },
+      );
+
+      // First, save to Firestore immediately for faster response
+      await firestoreService.addCertificate(data);
+
+      // Close the progress dialog
+      Navigator.of(context).pop();
+
+      // Show success message
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            'Certificate saved successfully!',
+            style: GoogleFonts.inter(),
+          ),
+          behavior: SnackBarBehavior.floating,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(10),
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 3),
         ),
-        behavior: SnackBarBehavior.floating,
-        shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(10),
-        ),
-      ),
-    );
-    Navigator.pop(context);
+      );
+
+      // Generate and upload PDF in background (optional)
+      try {
+        if (_generatePdf) {
+          print('DEBUG: Starting PDF generation...');
+
+          final pdfStorageService = PdfStorageService();
+          final pdfBase64 = await pdfStorageService.generateAndEncodePdf(data);
+          print(
+              'DEBUG: PDF generated and encoded. Size: ${pdfBase64.length} characters');
+
+          // Store PDF as base64 in Firestore (free!)
+          data['pdfBase64'] = pdfBase64;
+          data['pdfGeneratedAt'] = FieldValue.serverTimestamp();
+
+          // Update the certificate with PDF data
+          print('DEBUG: Updating Firestore with PDF data...');
+          await firestoreService.updateCertificatePdfData(
+              data['shareToken'] as String, pdfBase64);
+          print('DEBUG: Firestore updated successfully');
+
+          // Show PDF upload success
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'PDF generated and stored successfully!\nSize: ${(pdfBase64.length / 1024).toStringAsFixed(1)}KB',
+                style: GoogleFonts.inter(),
+              ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              backgroundColor: Colors.blue,
+              duration: const Duration(seconds: 5),
+            ),
+          );
+        } else {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                'PDF generation skipped. Certificate saved successfully!',
+                style: GoogleFonts.inter(),
+              ),
+              behavior: SnackBarBehavior.floating,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10),
+              ),
+              backgroundColor: Colors.green,
+            ),
+          );
+        }
+      } catch (pdfError) {
+        // PDF upload failed, but certificate is still saved
+        print('ERROR: PDF generation failed: $pdfError');
+        print('ERROR: Stack trace: ${StackTrace.current}');
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Certificate saved, but PDF generation failed: $pdfError',
+              style: GoogleFonts.inter(),
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            backgroundColor: Colors.orange,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+
+      // Navigate back with result
+      if (mounted) {
+        Navigator.of(context).pop(true); // Return true to indicate success
+      }
+    } catch (e) {
+      // Close progress dialog if it's still open
+      if (Navigator.canPop(context)) {
+        Navigator.of(context).pop();
+      }
+
+      print('ERROR: Failed to save certificate: $e');
+      print('ERROR: Stack trace: ${StackTrace.current}');
+
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              'Failed to save certificate: $e',
+              style: GoogleFonts.inter(),
+            ),
+            backgroundColor: Colors.red,
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() {
+          _generatingPdf = false;
+        });
+      }
+    }
   }
 
   @override
@@ -172,6 +358,12 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
                       isDark: isDark,
                       maxLines: 3,
                     ),
+                    const SizedBox(height: 16),
+                    _buildTextField(
+                      controller: _recipientEmailController,
+                      label: 'Recipient Email (required)',
+                      isDark: isDark,
+                    ),
                     const SizedBox(height: 24),
                     _buildDateField(
                       title: "Date Issued",
@@ -188,12 +380,25 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
                     ),
                     const SizedBox(height: 24),
                     Text(
-                      "Digital Signature",
+                      "Digital Signature (upload image or enter text)",
                       style: GoogleFonts.inter(
                         fontSize: 16,
                         fontWeight: FontWeight.w600,
                         color: textColor,
                       ),
+                    ),
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        ElevatedButton.icon(
+                          icon: const Icon(Icons.image),
+                          label: const Text('Upload Signature'),
+                          onPressed: _pickSignatureImage,
+                        ),
+                        const SizedBox(width: 12),
+                        if (_signatureImage != null)
+                          Image.file(_signatureImage!, width: 80, height: 40),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     TextFormField(
@@ -230,6 +435,65 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
                         fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
                       ),
                     ),
+                    if (_generatingPdf)
+                      const Padding(
+                        padding: EdgeInsets.all(16),
+                        child: CircularProgressIndicator(),
+                      ),
+                    const SizedBox(height: 16),
+
+                    // PDF Generation Toggle
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: borderColor),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            color: isDark ? Colors.blue[300] : Colors.blue[700],
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'Generate PDF',
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600,
+                                    color: textColor,
+                                  ),
+                                ),
+                                Text(
+                                  'Create and upload PDF certificate',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          Switch(
+                            value: _generatePdf,
+                            onChanged: (value) {
+                              setState(() {
+                                _generatePdf = value;
+                              });
+                            },
+                            activeColor:
+                                isDark ? Colors.blue[300] : Colors.blue[700],
+                          ),
+                        ],
+                      ),
+                    ),
+
                     const SizedBox(height: 32),
                     SizedBox(
                       width: double.infinity,
@@ -371,6 +635,7 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
     _recipientController.dispose();
     _organizationController.dispose();
     _purposeController.dispose();
+    _recipientEmailController.dispose();
     super.dispose();
   }
 }

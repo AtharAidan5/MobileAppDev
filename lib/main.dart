@@ -7,6 +7,15 @@ import 'package:firebase_core/firebase_core.dart';
 import 'services/firestore_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:provider/provider.dart';
+import 'services/auth_service.dart';
+import 'package:flutter/services.dart';
+import 'package:go_router/go_router.dart';
+import 'package:url_launcher/url_launcher.dart';
+import 'dart:io';
+import 'services/storage_service.dart';
+import 'services/pdf_storage_service.dart';
+import 'package:flutter_pdfview/flutter_pdfview.dart';
 
 // Theme management
 class AppTheme {
@@ -131,24 +140,180 @@ class AppTheme {
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await Firebase.initializeApp();
-  runApp(const MyApp());
+  runApp(
+    MultiProvider(
+      providers: [
+        ChangeNotifierProvider(create: (_) => UserProvider()),
+      ],
+      child: CertifyAppRouter(),
+    ),
+  );
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+class UserProvider extends ChangeNotifier {
+  User? user;
+  String? role;
+  final AuthService _authService = AuthService();
+
+  Future<void> loadUser() async {
+    user = _authService.currentUser;
+    if (user != null) {
+      role = await _authService.getUserRole(user!.uid);
+    }
+    notifyListeners();
+  }
+
+  void clear() {
+    user = null;
+    role = null;
+    notifyListeners();
+  }
+}
+
+class CertifyAppRouter extends StatelessWidget {
+  CertifyAppRouter({super.key});
+
+  final GoRouter _router = GoRouter(
+    routes: [
+      GoRoute(
+        path: '/',
+        builder: (context, state) => const AuthGate(),
+        routes: [
+          GoRoute(
+            path: 'view/:token',
+            builder: (context, state) {
+              final token = state.pathParameters['token']!;
+              return CertificateViewerScreen(token: token);
+            },
+          ),
+        ],
+      ),
+    ],
+    initialLocation: '/',
+    debugLogDiagnostics: true,
+  );
 
   @override
   Widget build(BuildContext context) {
     return ValueListenableBuilder<bool>(
       valueListenable: AppTheme.isDarkModeNotifier,
       builder: (context, isDark, child) {
-        return MaterialApp(
+        return MaterialApp.router(
           title: 'Certify App',
           debugShowCheckedModeBanner: false,
           theme: isDark ? AppTheme.darkTheme : AppTheme.lightTheme,
-          home: const HomeScreen(),
+          routerConfig: _router,
         );
       },
+    );
+  }
+}
+
+class AuthGate extends StatelessWidget {
+  const AuthGate({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: AuthService().authStateChanges,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return const Scaffold(
+              body: Center(child: CircularProgressIndicator()));
+        }
+        if (!snapshot.hasData) {
+          return const LoginScreen();
+        }
+
+        // Load user role and show loading screen
+        return FutureBuilder<void>(
+          future: Provider.of<UserProvider>(context, listen: false).loadUser(),
+          builder: (context, roleSnapshot) {
+            if (roleSnapshot.connectionState == ConnectionState.waiting) {
+              return const Scaffold(
+                body: Center(
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      CircularProgressIndicator(),
+                      SizedBox(height: 16),
+                      Text('Loading user role...'),
+                    ],
+                  ),
+                ),
+              );
+            }
+            return const HomeScreen();
+          },
+        );
+      },
+    );
+  }
+}
+
+class LoginScreen extends StatefulWidget {
+  const LoginScreen({super.key});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  bool _loading = false;
+  String? _error;
+
+  Future<void> _handleGoogleSignIn() async {
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+    try {
+      await AuthService().signInWithGoogle();
+    } catch (e) {
+      setState(() {
+        _error = e.toString();
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(32.0),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text('Certify App',
+                  style: GoogleFonts.poppins(
+                      fontSize: 32, fontWeight: FontWeight.bold)),
+              const SizedBox(height: 32),
+              if (_error != null)
+                Text(_error!, style: const TextStyle(color: Colors.red)),
+              ElevatedButton.icon(
+                icon: const Icon(Icons.login),
+                label: const Text('Sign in with Google (UPM only)'),
+                onPressed: _loading ? null : _handleGoogleSignIn,
+                style: ElevatedButton.styleFrom(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 24, vertical: 16),
+                  textStyle: const TextStyle(fontSize: 18),
+                ),
+              ),
+              if (_loading)
+                const Padding(
+                  padding: EdgeInsets.only(top: 16),
+                  child: CircularProgressIndicator(),
+                ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
@@ -165,14 +330,6 @@ class _HomeScreenState extends State<HomeScreen>
   int _currentIndex = 0;
   late AnimationController _animationController;
   final GlobalKey _scaffoldKey = GlobalKey();
-
-  final List<Widget> _screens = [
-    const DashboardScreen(),
-    const CertificatesScreen(),
-    const UploadScreen(),
-    const CreateCertificateScreen(),
-    const ProfileScreen(),
-  ];
 
   @override
   void initState() {
@@ -191,7 +348,38 @@ class _HomeScreenState extends State<HomeScreen>
 
   @override
   Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final role = userProvider.role;
     final isDark = Theme.of(context).brightness == Brightness.dark;
+
+    // Debug logging
+    print('DEBUG: Current role: $role');
+    print('DEBUG: User: ${userProvider.user?.email}');
+
+    // Define screens and nav items based on role
+    final List<Widget> screens = [
+      const DashboardScreen(),
+      if (role == 'admin') const AdminPanelScreen(),
+      if (role == 'ca' || role == 'admin') const ApprovalScreen(),
+      const UploadScreen(),
+      const ProfileScreen(),
+    ];
+    final List<Map<String, dynamic>> navItems = [
+      {'icon': Icons.dashboard_outlined, 'label': 'Dashboard'},
+      if (role == 'admin')
+        {'icon': Icons.admin_panel_settings, 'label': 'Admin'},
+      if (role == 'ca' || role == 'admin')
+        {'icon': Icons.verified, 'label': 'Approvals'},
+      {'icon': Icons.upload_file_outlined, 'label': 'Upload'},
+      {'icon': Icons.person_outline, 'label': 'Profile'},
+    ];
+
+    print('DEBUG: Number of nav items: ${navItems.length}');
+    print(
+        'DEBUG: Admin nav item exists: ${navItems.any((item) => item['label'] == 'Admin')}');
+
+    // Guard index
+    int safeIndex = _currentIndex < screens.length ? _currentIndex : 0;
 
     return Scaffold(
       key: _scaffoldKey,
@@ -248,7 +436,7 @@ class _HomeScreenState extends State<HomeScreen>
             ),
           ),
           // Content with Neumorphic Effect
-          _screens[_currentIndex],
+          screens[safeIndex],
         ],
       ),
       bottomNavigationBar: Container(
@@ -264,72 +452,52 @@ class _HomeScreenState extends State<HomeScreen>
         ),
         child: SafeArea(
           child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+            padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 4),
             child: Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
-              children: [
-                _buildNavItem(0, Icons.dashboard_outlined, 'Dashboard'),
-                _buildNavItem(1, Icons.article_outlined, 'Certificates'),
-                _buildNavItem(2, Icons.upload_file_outlined, 'Upload'),
-                _buildNavItem(3, Icons.add_circle_outline, 'Create'),
-                _buildNavItem(4, Icons.person_outline, 'Profile'),
-              ],
+              children: List.generate(navItems.length, (index) {
+                final item = navItems[index];
+                final isSelected = safeIndex == index;
+                final color = isSelected
+                    ? (isDark ? Colors.blue[300] : Colors.blue[700])
+                    : (isDark ? Colors.grey[400] : Colors.grey[600]);
+                return GestureDetector(
+                  onTap: () => setState(() => _currentIndex = index),
+                  child: Container(
+                    padding:
+                        const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: isSelected
+                          ? (isDark
+                              ? Colors.blue[900]?.withOpacity(0.2)
+                              : Colors.blue[50])
+                          : Colors.transparent,
+                      borderRadius: BorderRadius.circular(8),
+                    ),
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(item['icon'], color: color, size: 20),
+                        const SizedBox(height: 2),
+                        Text(
+                          item['label'],
+                          style: GoogleFonts.inter(
+                            fontSize: 10,
+                            color: color,
+                            fontWeight:
+                                isSelected ? FontWeight.w600 : FontWeight.w400,
+                          ),
+                          textAlign: TextAlign.center,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                  ),
+                );
+              }),
             ),
           ),
-        ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: () async {
-          await FirestoreService().addCertificate({
-            'name': 'Test Certificate',
-            'recipient': 'Test User',
-            'organization': 'Test Org',
-            'purpose': 'Testing Firestore',
-            'issuedDate': Timestamp.fromDate(DateTime.now()),
-            'expiryDate': null,
-            'signature': 'Test Signature',
-          });
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Sample certificate added!')),
-          );
-        },
-        child: const Icon(Icons.add),
-        tooltip: 'Add Sample Certificate',
-      ),
-    );
-  }
-
-  Widget _buildNavItem(int index, IconData icon, String label) {
-    final isDark = Theme.of(context).brightness == Brightness.dark;
-    final isSelected = _currentIndex == index;
-    final color = isSelected
-        ? (isDark ? Colors.blue[300] : Colors.blue[700])
-        : (isDark ? Colors.grey[400] : Colors.grey[600]);
-
-    return GestureDetector(
-      onTap: () => setState(() => _currentIndex = index),
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-        decoration: BoxDecoration(
-          color: isSelected
-              ? (isDark ? Colors.blue[900]?.withOpacity(0.2) : Colors.blue[50])
-              : Colors.transparent,
-          borderRadius: BorderRadius.circular(12),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Icon(icon, color: color),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: GoogleFonts.inter(
-                fontSize: 12,
-                color: color,
-                fontWeight: isSelected ? FontWeight.w600 : FontWeight.w400,
-              ),
-            ),
-          ],
         ),
       ),
     );
@@ -401,7 +569,12 @@ class DashboardScreen extends StatelessWidget {
                   MaterialPageRoute(
                     builder: (context) => const CreateCertificateScreen(),
                   ),
-                ),
+                ).then((result) {
+                  // Certificate created successfully - no need to refresh since data streams will update automatically
+                  if (result == true) {
+                    print('DEBUG: Certificate created successfully');
+                  }
+                }),
               ),
               _buildActionCard(
                 context,
@@ -417,10 +590,15 @@ class DashboardScreen extends StatelessWidget {
               ),
               _buildActionCard(
                 context,
-                Icons.share_outlined,
-                'Share',
+                Icons.article_outlined,
+                'Certificates',
                 const Color(0xFF00B894),
-                () => debugPrint('Share tapped'),
+                () => Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const CertificatesScreen(),
+                  ),
+                ),
               ),
               _buildActionCard(
                 context,
@@ -575,8 +753,15 @@ class DashboardScreen extends StatelessWidget {
   }
 }
 
-class CertificatesScreen extends StatelessWidget {
+class CertificatesScreen extends StatefulWidget {
   const CertificatesScreen({super.key});
+
+  @override
+  State<CertificatesScreen> createState() => _CertificatesScreenState();
+}
+
+class _CertificatesScreenState extends State<CertificatesScreen> {
+  Map<String, String> _lastStatuses = {};
 
   @override
   Widget build(BuildContext context) {
@@ -590,27 +775,647 @@ class CertificatesScreen extends StatelessWidget {
           return const Center(child: Text('No certificates found.'));
         }
         final docs = snapshot.data!.docs;
+        // Check for status changes
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          for (final doc in docs) {
+            final certId = doc.id;
+            final status = doc['status'] ?? '';
+            if (_lastStatuses.containsKey(certId) &&
+                _lastStatuses[certId] != status) {
+              if (status == 'approved' || status == 'rejected') {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Certificate "${doc['name']}" was $status.'),
+                    backgroundColor:
+                        status == 'approved' ? Colors.green : Colors.red,
+                  ),
+                );
+              }
+            }
+            _lastStatuses[certId] = status;
+          }
+        });
         return ListView.builder(
           padding: const EdgeInsets.all(16),
           itemCount: docs.length,
           itemBuilder: (context, index) {
             final data = docs[index].data() as Map<String, dynamic>;
+            final shareToken = data['shareToken'] ?? '';
+            final certId = docs[index].id;
             return Card(
               margin: const EdgeInsets.only(bottom: 16),
               child: ListTile(
-                contentPadding: const EdgeInsets.all(16),
                 leading: Icon(Icons.verified,
                     color: Theme.of(context).colorScheme.primary),
-                title: Text(data['name'] ?? 'No Name'),
+                title: Row(
+                  children: [
+                    Expanded(
+                      child: Text(data['name'] ?? 'No Name'),
+                    ),
+                    if (data['pdfBase64'] != null)
+                      Icon(
+                        Icons.picture_as_pdf,
+                        color: Colors.red[600],
+                        size: 20,
+                      ),
+                  ],
+                ),
                 subtitle: Text(
-                  'Recipient: ${data['recipient'] ?? ''}\nOrganization: ${data['organization'] ?? ''}',
+                  'Recipient: ${data['recipient'] ?? ''}\nOrganization: ${data['organization'] ?? ''}\nStatus: ${data['status'] ?? 'unknown'}',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
+                trailing: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    if (data['pdfBase64'] != null)
+                      IconButton(
+                        icon: const Icon(Icons.download),
+                        tooltip: 'Download PDF',
+                        onPressed: () async {
+                          final pdfStorageService = PdfStorageService();
+                          final pdfBase64 = data['pdfBase64'] as String;
+                          final fileName =
+                              'certificate_${data['name']}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+
+                          try {
+                            final file = await pdfStorageService.savePdfToFile(
+                                pdfBase64, fileName);
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('PDF saved to: ${file.path}'),
+                                backgroundColor: Colors.green,
+                              ),
+                            );
+                          } catch (e) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Failed to save PDF: $e'),
+                                backgroundColor: Colors.red,
+                              ),
+                            );
+                          }
+                        },
+                      ),
+                    IconButton(
+                      icon: const Icon(Icons.share),
+                      tooltip: 'Share',
+                      onPressed: () async {
+                        final url = 'https://yourapp.com/view/$shareToken';
+                        await Clipboard.setData(ClipboardData(text: url));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text('Share link copied!')),
+                        );
+                      },
+                    ),
+                  ],
+                ),
+                onTap: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) =>
+                          CertificateViewerScreen(token: shareToken),
+                    ),
+                  );
+                },
               ),
             );
           },
         );
       },
+    );
+  }
+}
+
+class CertificateViewerScreen extends StatefulWidget {
+  final String token;
+  const CertificateViewerScreen({super.key, required this.token});
+
+  @override
+  State<CertificateViewerScreen> createState() =>
+      _CertificateViewerScreenState();
+}
+
+class _CertificateViewerScreenState extends State<CertificateViewerScreen> {
+  Future<void> _viewPdf(String pdfBase64, String certificateName) async {
+    try {
+      final pdfStorageService = PdfStorageService();
+      final fileName =
+          'certificate_${certificateName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = await pdfStorageService.savePdfToFile(pdfBase64, fileName);
+
+      // Navigate to PDF viewer screen
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) =>
+              PDFViewerScreen(pdfPath: file.path, title: certificateName),
+        ),
+      );
+    } catch (e) {
+      // Fallback to external viewer
+      try {
+        final pdfStorageService = PdfStorageService();
+        final dataUrl = pdfStorageService.createDataUrl(pdfBase64);
+        final uri = Uri.parse(dataUrl);
+
+        if (await canLaunchUrl(uri)) {
+          await launchUrl(uri, mode: LaunchMode.externalApplication);
+        } else {
+          throw Exception('No PDF viewer available');
+        }
+      } catch (fallbackError) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Could not open PDF: $fallbackError'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _downloadPdf(String pdfBase64, String certificateName) async {
+    try {
+      final pdfStorageService = PdfStorageService();
+      final fileName =
+          'certificate_${certificateName}_${DateTime.now().millisecondsSinceEpoch}.pdf';
+      final file = await pdfStorageService.savePdfToFile(pdfBase64, fileName);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('PDF saved to: ${file.path}'),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to save PDF: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final borderColor = isDark ? Colors.grey[700]! : Colors.grey[300]!;
+    final userProvider = Provider.of<UserProvider>(context, listen: false);
+    return FutureBuilder(
+      future: FirestoreService().getCertificateByToken(widget.token),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          return Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.background,
+            body: const Center(child: CircularProgressIndicator()),
+          );
+        }
+        if (!snapshot.hasData ||
+            snapshot.data == null ||
+            !snapshot.data!.exists) {
+          return Scaffold(
+            backgroundColor: Theme.of(context).colorScheme.background,
+            body: const Center(child: Text('Certificate not found.')),
+          );
+        }
+        final data = snapshot.data!.data() as Map<String, dynamic>;
+        final certId = snapshot.data!.id;
+        // Log view action
+        FirestoreService().logCertificateAction(
+          certId: certId,
+          action: 'view',
+          userEmail: userProvider.user?.email ?? 'anonymous',
+        );
+        return Scaffold(
+          appBar: AppBar(
+            title: Text('Certificate Viewer',
+                style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+            centerTitle: true,
+            backgroundColor: Colors.transparent,
+            elevation: 0,
+          ),
+          backgroundColor: Theme.of(context).colorScheme.background,
+          body: SingleChildScrollView(
+            padding: const EdgeInsets.all(12),
+            child: Center(
+              child: Container(
+                constraints: BoxConstraints(
+                  maxWidth: MediaQuery.of(context).size.width * 0.95,
+                ),
+                margin: const EdgeInsets.all(4),
+                padding: const EdgeInsets.fromLTRB(12, 12, 12, 20),
+                decoration: BoxDecoration(
+                  color: isDark ? Colors.grey[900] : Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: borderColor),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.05),
+                      blurRadius: 15,
+                      spreadRadius: 5,
+                      offset: const Offset(0, 5),
+                    ),
+                  ],
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text('Name:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['name'] ?? '',
+                        style: GoogleFonts.poppins(
+                            fontSize: 18,
+                            fontWeight: FontWeight.bold,
+                            color: textColor)),
+                    const SizedBox(height: 8),
+                    Text('Recipient:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['recipient'] ?? '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Organization:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['organization'] ?? '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Purpose:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['purpose'] ?? '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Issued:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(
+                        data['issuedDate'] != null
+                            ? (data['issuedDate'] as Timestamp)
+                                .toDate()
+                                .toString()
+                                .split(' ')
+                                .first
+                            : '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Expiry:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(
+                        data['expiryDate'] != null
+                            ? (data['expiryDate'] as Timestamp)
+                                .toDate()
+                                .toString()
+                                .split(' ')
+                                .first
+                            : '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Status:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['status'] ?? '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Approver:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['approver'] ?? '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 6),
+                    Text('Approval Date:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(
+                        data['approvalDate'] != null
+                            ? (data['approvalDate'] as Timestamp)
+                                .toDate()
+                                .toString()
+                                .split(' ')
+                                .first
+                            : '',
+                        style:
+                            GoogleFonts.inter(fontSize: 14, color: textColor)),
+                    const SizedBox(height: 12),
+                    Divider(color: borderColor),
+                    const SizedBox(height: 12),
+                    Text('Signature:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    Text(data['signature'] ?? '',
+                        style: GoogleFonts.poppins(
+                            fontSize: 14, color: textColor)),
+
+                    // PDF Section
+                    const SizedBox(height: 12),
+                    Divider(color: borderColor),
+                    const SizedBox(height: 12),
+                    Text('PDF Certificate:',
+                        style: GoogleFonts.inter(
+                            fontWeight: FontWeight.w600, color: textColor)),
+                    const SizedBox(height: 8),
+
+                    if (data['pdfBase64'] != null) ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf,
+                            color: Colors.red[600],
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PDF Available',
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600,
+                                    color: textColor,
+                                  ),
+                                ),
+                                Text(
+                                  'Certificate PDF has been generated',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      LayoutBuilder(
+                        builder: (context, constraints) {
+                          // Use column layout for narrow screens, row for wider screens
+                          if (constraints.maxWidth < 400) {
+                            return Column(
+                              children: [
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.download),
+                                    label: const Text('Download PDF'),
+                                    onPressed: () async {
+                                      await _downloadPdf(
+                                          data['pdfBase64'] as String,
+                                          data['name'] ?? '');
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red[600],
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(height: 8),
+                                SizedBox(
+                                  width: double.infinity,
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.open_in_new),
+                                    label: const Text('View PDF'),
+                                    onPressed: () async {
+                                      await _viewPdf(
+                                          data['pdfBase64'] as String,
+                                          data['name'] ?? '');
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green[600],
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          } else {
+                            return Row(
+                              children: [
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.download),
+                                    label: const Text('Download PDF'),
+                                    onPressed: () async {
+                                      await _downloadPdf(
+                                          data['pdfBase64'] as String,
+                                          data['name'] ?? '');
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.red[600],
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: ElevatedButton.icon(
+                                    icon: const Icon(Icons.open_in_new),
+                                    label: const Text('View PDF'),
+                                    onPressed: () async {
+                                      await _viewPdf(
+                                          data['pdfBase64'] as String,
+                                          data['name'] ?? '');
+                                    },
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: Colors.green[600],
+                                      foregroundColor: Colors.white,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            );
+                          }
+                        },
+                      ),
+                    ] else ...[
+                      Row(
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf_outlined,
+                            color: isDark ? Colors.grey[400] : Colors.grey[600],
+                            size: 24,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  'PDF Not Available',
+                                  style: GoogleFonts.inter(
+                                    fontWeight: FontWeight.w600,
+                                    color: isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                                Text(
+                                  'PDF generation is in progress or disabled',
+                                  style: GoogleFonts.inter(
+                                    fontSize: 12,
+                                    color: isDark
+                                        ? Colors.grey[400]
+                                        : Colors.grey[600],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton.icon(
+                          icon: const Icon(Icons.upload_file),
+                          label: const Text('Generate PDF Now'),
+                          onPressed: () async {
+                            // Show loading
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text('Generating PDF...'),
+                                backgroundColor: Colors.blue,
+                              ),
+                            );
+
+                            try {
+                              // Generate PDF for this certificate
+                              final pdfStorageService = PdfStorageService();
+                              final pdfBase64 = await pdfStorageService
+                                  .generateAndEncodePdf(data);
+
+                              // Update Firestore
+                              await FirestoreService().updateCertificatePdfData(
+                                  data['shareToken'] as String, pdfBase64);
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('PDF generated successfully!'),
+                                  backgroundColor: Colors.green,
+                                ),
+                              );
+
+                              // Refresh the screen
+                              Navigator.pushReplacement(
+                                context,
+                                MaterialPageRoute(
+                                  builder: (context) => CertificateViewerScreen(
+                                      token: widget.token),
+                                ),
+                              );
+                            } catch (e) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text('Failed to generate PDF: $e'),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue[600],
+                            foregroundColor: Colors.white,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+            ),
+          ),
+        );
+      },
+    );
+  }
+}
+
+class PDFViewerScreen extends StatelessWidget {
+  final String pdfPath;
+  final String title;
+
+  const PDFViewerScreen({
+    super.key,
+    required this.pdfPath,
+    required this.title,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(
+          title,
+          style: GoogleFonts.poppins(fontWeight: FontWeight.w600),
+        ),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.share),
+            onPressed: () async {
+              try {
+                await Share.shareFiles([pdfPath],
+                    text: 'Certificate PDF: $title');
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to share PDF: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
+          ),
+        ],
+      ),
+      body: PDFView(
+        filePath: pdfPath,
+        enableSwipe: true,
+        swipeHorizontal: false,
+        autoSpacing: true,
+        pageFling: true,
+        pageSnap: true,
+        defaultPage: 0,
+        fitPolicy: FitPolicy.BOTH,
+        preventLinkNavigation: false,
+        onRender: (pages) {
+          // PDF rendered successfully
+        },
+        onError: (error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading PDF: $error'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+        onPageError: (page, error) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Error loading page $page: $error'),
+              backgroundColor: Colors.red,
+            ),
+          );
+        },
+      ),
     );
   }
 }
@@ -622,6 +1427,7 @@ class ProfileScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     final isDark = Theme.of(context).brightness == Brightness.dark;
     final textColor = isDark ? Colors.white : Colors.white;
+    final currentUser = AuthService().currentUser;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.all(16),
@@ -660,11 +1466,96 @@ class ProfileScreen extends StatelessWidget {
             ).textTheme.bodyLarge?.copyWith(color: Colors.grey[600]),
           ),
           const SizedBox(height: 32),
+
+          // Debug Section - Show UID
+          if (currentUser != null) ...[
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: Colors.blue.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.blue.withOpacity(0.3)),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Debug Info',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      color: Colors.blue[700],
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Your UID: ${currentUser.uid}',
+                    style: GoogleFonts.inter(
+                      fontSize: 12,
+                      color: Colors.blue[600],
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Consumer<UserProvider>(
+                    builder: (context, userProvider, child) {
+                      return Text(
+                        'Your Role: ${userProvider.role ?? 'Loading...'}',
+                        style: GoogleFonts.inter(
+                          fontSize: 12,
+                          color: Colors.blue[600],
+                        ),
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'Copy this UID to create admin user',
+                    style: GoogleFonts.inter(
+                      fontSize: 10,
+                      color: Colors.blue[500],
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 16),
+          ],
+
           _buildProfileButton(
             context,
             Icons.edit_outlined,
             'Edit Profile',
             () {},
+          ),
+          const SizedBox(height: 12),
+          _buildProfileButton(
+            context,
+            Icons.admin_panel_settings,
+            'Admin Setup',
+            () => Navigator.push(
+              context,
+              MaterialPageRoute(
+                builder: (context) => const AdminSetupScreen(),
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          _buildProfileButton(
+            context,
+            Icons.refresh,
+            'Refresh Role',
+            () async {
+              final userProvider =
+                  Provider.of<UserProvider>(context, listen: false);
+              await userProvider.loadUser();
+              ScaffoldMessenger.of(context).showSnackBar(
+                SnackBar(
+                  content:
+                      Text('Role refreshed: ${userProvider.role ?? 'No role'}'),
+                  duration: const Duration(seconds: 2),
+                ),
+              );
+            },
           ),
           const SizedBox(height: 12),
           _buildProfileButton(
@@ -1052,6 +1943,627 @@ class HelpSupportScreen extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+  }
+}
+
+// Admin Panel Screen
+class AdminPanelScreen extends StatelessWidget {
+  const AdminPanelScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Admin Panel')),
+      body: StreamBuilder<QuerySnapshot>(
+        stream: FirebaseFirestore.instance.collection('users').snapshots(),
+        builder: (context, snapshot) {
+          if (!snapshot.hasData) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          final users = snapshot.data!.docs;
+          return ListView.builder(
+            itemCount: users.length,
+            itemBuilder: (context, index) {
+              final user = users[index];
+              final email = user['email'] ?? '';
+              final role = user['role'] ?? 'recipient';
+              final lastLogin = user['lastLogin'] as Timestamp?;
+              final createdAt = user['createdAt'] as Timestamp?;
+
+              String lastLoginText = 'Never';
+              if (lastLogin != null) {
+                final now = DateTime.now();
+                final difference = now.difference(lastLogin.toDate());
+                if (difference.inDays > 0) {
+                  lastLoginText = '${difference.inDays} days ago';
+                } else if (difference.inHours > 0) {
+                  lastLoginText = '${difference.inHours} hours ago';
+                } else if (difference.inMinutes > 0) {
+                  lastLoginText = '${difference.inMinutes} minutes ago';
+                } else {
+                  lastLoginText = 'Just now';
+                }
+              }
+
+              String createdAtText = 'Unknown';
+              if (createdAt != null) {
+                createdAtText =
+                    '${createdAt.toDate().day}/${createdAt.toDate().month}/${createdAt.toDate().year}';
+              }
+
+              return Card(
+                margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 4),
+                child: ListTile(
+                  title: Text(email),
+                  subtitle: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text('Role: $role'),
+                      Text('Created: $createdAtText'),
+                      Text('Last Login: $lastLoginText'),
+                    ],
+                  ),
+                  trailing: PopupMenuButton<String>(
+                    onSelected: (value) async {
+                      await AuthService().setUserRole(user.id, value);
+                    },
+                    itemBuilder: (context) => [
+                      const PopupMenuItem(value: 'admin', child: Text('Admin')),
+                      const PopupMenuItem(value: 'ca', child: Text('CA')),
+                      const PopupMenuItem(
+                          value: 'recipient', child: Text('Recipient')),
+                    ],
+                    child: const Icon(Icons.edit),
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// CA Approval Screen
+class ApprovalScreen extends StatelessWidget {
+  const ApprovalScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    final userProvider = Provider.of<UserProvider>(context);
+    final approver = userProvider.user?.email ?? '';
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final borderColor = isDark ? Colors.grey[700]! : Colors.grey[300]!;
+    return Scaffold(
+      appBar: AppBar(
+        title: Text('Pending Approvals',
+            style: GoogleFonts.poppins(fontWeight: FontWeight.w600)),
+        centerTitle: true,
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      backgroundColor: Theme.of(context).colorScheme.background,
+      body: StreamBuilder(
+        stream: FirestoreService().getPendingCertificates(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (!snapshot.hasData || snapshot.data!.docs.isEmpty) {
+            return const Center(child: Text('No pending certificates.'));
+          }
+          final docs = snapshot.data!.docs;
+          return ListView.builder(
+            padding: const EdgeInsets.all(24),
+            itemCount: docs.length,
+            itemBuilder: (context, index) {
+              final data = docs[index].data() as Map<String, dynamic>;
+              final certId = docs[index].id;
+              return Card(
+                margin: const EdgeInsets.only(bottom: 20),
+                shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16)),
+                elevation: 2,
+                child: Padding(
+                  padding: const EdgeInsets.all(20),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(data['name'] ?? 'No Name',
+                          style: GoogleFonts.poppins(
+                              fontSize: 20, fontWeight: FontWeight.bold)),
+                      const SizedBox(height: 8),
+                      Text('Recipient: ${data['recipient'] ?? ''}',
+                          style: GoogleFonts.inter(fontSize: 16)),
+                      Text('Organization: ${data['organization'] ?? ''}',
+                          style: GoogleFonts.inter(fontSize: 16)),
+                      const SizedBox(height: 8),
+                      Row(
+                        children: [
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.check, color: Colors.white),
+                            label: const Text('Approve'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.green[600],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () async {
+                              await FirestoreService().updateCertificateStatus(
+                                  certId, 'approved',
+                                  approver: approver);
+                              await FirestoreService().logCertificateAction(
+                                certId: certId,
+                                action: 'approve',
+                                userEmail: approver,
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('Certificate approved.')));
+                            },
+                          ),
+                          const SizedBox(width: 12),
+                          ElevatedButton.icon(
+                            icon: const Icon(Icons.close, color: Colors.white),
+                            label: const Text('Reject'),
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red[600],
+                              foregroundColor: Colors.white,
+                              shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(10)),
+                            ),
+                            onPressed: () async {
+                              await FirestoreService().updateCertificateStatus(
+                                  certId, 'rejected',
+                                  approver: approver);
+                              await FirestoreService().logCertificateAction(
+                                certId: certId,
+                                action: 'reject',
+                                userEmail: approver,
+                              );
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                  const SnackBar(
+                                      content: Text('Certificate rejected.')));
+                            },
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+}
+
+// Admin Setup Screen - For manually creating admin users
+class AdminSetupScreen extends StatefulWidget {
+  const AdminSetupScreen({super.key});
+
+  @override
+  State<AdminSetupScreen> createState() => _AdminSetupScreenState();
+}
+
+class _AdminSetupScreenState extends State<AdminSetupScreen> {
+  final TextEditingController _uidController = TextEditingController();
+  final TextEditingController _emailController = TextEditingController();
+  final TextEditingController _roleController = TextEditingController();
+  bool _loading = false;
+  String? _message;
+  bool _useUid = false; // Toggle between UID and email-only mode
+
+  @override
+  void initState() {
+    super.initState();
+    _roleController.text = 'admin'; // Default role
+  }
+
+  @override
+  void dispose() {
+    _uidController.dispose();
+    _emailController.dispose();
+    _roleController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _createAdminUser() async {
+    if (_emailController.text.isEmpty) {
+      setState(() {
+        _message = 'Please enter an email address';
+      });
+      return;
+    }
+
+    if (_useUid && _uidController.text.isEmpty) {
+      setState(() {
+        _message = 'Please enter a UID when using UID mode';
+      });
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _message = null;
+    });
+
+    try {
+      String uid;
+      if (_useUid) {
+        // Use provided UID
+        await AuthService().createAdminUser(
+          uid: _uidController.text.trim(),
+          email: _emailController.text.trim(),
+          role: _roleController.text.trim(),
+        );
+        uid = _uidController.text.trim();
+      } else {
+        // Auto-generate UID
+        uid = await AuthService().createAdminUserWithEmail(
+          email: _emailController.text.trim(),
+          role: _roleController.text.trim(),
+        );
+      }
+
+      setState(() {
+        _message = 'Admin user created successfully!\nGenerated UID: $uid';
+        if (!_useUid) {
+          _uidController.text = uid; // Show the generated UID
+        }
+      });
+    } catch (e) {
+      setState(() {
+        _message = 'Error: ${e.toString()}';
+      });
+    } finally {
+      setState(() {
+        _loading = false;
+      });
+    }
+  }
+
+  Future<void> _linkCurrentUser() async {
+    try {
+      await AuthService().linkCurrentUserToAdmin();
+      setState(() {
+        _message = 'Current user linked to admin successfully!';
+      });
+    } catch (e) {
+      setState(() {
+        _message = 'Error: ${e.toString()}';
+      });
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final textColor = isDark ? Colors.white : Colors.black87;
+    final borderColor = isDark ? Colors.grey[700]! : Colors.grey[300]!;
+
+    return Scaffold(
+      appBar: AppBar(
+        title: const Text('Admin Setup'),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+      ),
+      backgroundColor: Theme.of(context).colorScheme.background,
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              'Create Admin User',
+              style: GoogleFonts.poppins(
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'Manually create admin users in Firestore',
+              style: GoogleFonts.inter(
+                color: isDark ? Colors.grey[400] : Colors.grey[600],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Mode Toggle
+            Container(
+              width: double.infinity,
+              padding: const EdgeInsets.all(16),
+              decoration: BoxDecoration(
+                color: isDark ? Colors.grey[800] : Colors.grey[100],
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: borderColor),
+              ),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    'Creation Mode',
+                    style: GoogleFonts.inter(
+                      fontWeight: FontWeight.w600,
+                      color: textColor,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _useUid = false),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: !_useUid
+                                  ? (isDark
+                                      ? Colors.blue[600]
+                                      : Colors.blue[500])
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: !_useUid
+                                    ? (isDark
+                                        ? Colors.blue[400]!
+                                        : Colors.blue[600]!)
+                                    : borderColor,
+                              ),
+                            ),
+                            child: Text(
+                              'Auto-Generate UID',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                color: !_useUid ? Colors.white : textColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setState(() => _useUid = true),
+                          child: Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: _useUid
+                                  ? (isDark
+                                      ? Colors.blue[600]
+                                      : Colors.blue[500])
+                                  : Colors.transparent,
+                              borderRadius: BorderRadius.circular(8),
+                              border: Border.all(
+                                color: _useUid
+                                    ? (isDark
+                                        ? Colors.blue[400]!
+                                        : Colors.blue[600]!)
+                                    : borderColor,
+                              ),
+                            ),
+                            child: Text(
+                              'Use Existing UID',
+                              textAlign: TextAlign.center,
+                              style: GoogleFonts.inter(
+                                color: _useUid ? Colors.white : textColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
+
+            // UID Field (only show if using UID mode)
+            if (_useUid) ...[
+              Text(
+                'User UID (from Firebase Auth)',
+                style: GoogleFonts.inter(
+                  fontWeight: FontWeight.w500,
+                  color: textColor,
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextField(
+                controller: _uidController,
+                style: GoogleFonts.inter(color: textColor),
+                decoration: InputDecoration(
+                  hintText: 'Enter Firebase Auth UID',
+                  hintStyle: GoogleFonts.inter(
+                    color: isDark ? Colors.grey[400] : Colors.grey[600],
+                  ),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: borderColor),
+                  ),
+                  enabledBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: borderColor),
+                  ),
+                  focusedBorder: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(
+                      color: isDark ? Colors.blue[300]! : Colors.blue[700]!,
+                    ),
+                  ),
+                  filled: true,
+                  fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
+                ),
+              ),
+              const SizedBox(height: 16),
+            ],
+
+            // Email Field
+            Text(
+              'Email Address',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _emailController,
+              style: GoogleFonts.inter(color: textColor),
+              decoration: InputDecoration(
+                hintText: 'Enter email address',
+                hintStyle: GoogleFonts.inter(
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: isDark ? Colors.blue[300]! : Colors.blue[700]!,
+                  ),
+                ),
+                filled: true,
+                fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Role Field
+            Text(
+              'Role',
+              style: GoogleFonts.inter(
+                fontWeight: FontWeight.w500,
+                color: textColor,
+              ),
+            ),
+            const SizedBox(height: 8),
+            TextField(
+              controller: _roleController,
+              style: GoogleFonts.inter(color: textColor),
+              decoration: InputDecoration(
+                hintText: 'admin, ca, or recipient',
+                hintStyle: GoogleFonts.inter(
+                  color: isDark ? Colors.grey[400] : Colors.grey[600],
+                ),
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                enabledBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(color: borderColor),
+                ),
+                focusedBorder: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  borderSide: BorderSide(
+                    color: isDark ? Colors.blue[300]! : Colors.blue[700]!,
+                  ),
+                ),
+                filled: true,
+                fillColor: isDark ? Colors.grey[800] : Colors.grey[50],
+              ),
+            ),
+            const SizedBox(height: 32),
+
+            // Create Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _createAdminUser,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: isDark ? Colors.blue[600] : Colors.blue[700],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _loading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                        _useUid
+                            ? 'Create Admin User'
+                            : 'Create Admin User (Auto UID)',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // Link Current User Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton(
+                onPressed: _loading ? null : _linkCurrentUser,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor:
+                      isDark ? Colors.green[600] : Colors.green[700],
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 16),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+                child: _loading
+                    ? const CircularProgressIndicator(color: Colors.white)
+                    : Text(
+                        'Link Current User to Admin',
+                        style: GoogleFonts.inter(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+              ),
+            ),
+
+            // Message Display
+            if (_message != null)
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: _message!.contains('Error')
+                      ? Colors.red[100]
+                      : Colors.green[100],
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(
+                    color: _message!.contains('Error')
+                        ? Colors.red[300]!
+                        : Colors.green[300]!,
+                  ),
+                ),
+                child: Text(
+                  _message!,
+                  style: GoogleFonts.inter(
+                    color: _message!.contains('Error')
+                        ? Colors.red[800]
+                        : Colors.green[800],
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+          ],
+        ),
       ),
     );
   }

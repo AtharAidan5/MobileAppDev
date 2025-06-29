@@ -15,7 +15,7 @@ const admin = require('firebase-admin');
 const sgMail = require('@sendgrid/mail');
 
 admin.initializeApp();
-sgMail.setApiKey(process.env.SENDGRID_API_KEY || 'YOUR_SENDGRID_API_KEY'); // Use env variable or placeholder
+sgMail.setApiKey(process.env.SENDGRID_API_KEY); // Only use env variable, no fallback
 
 exports.sendCertificateStatusEmail = functions.firestore
   .document('certificates/{certId}')
