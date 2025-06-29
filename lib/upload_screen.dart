@@ -1,8 +1,83 @@
+import 'dart:io';
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'services/storage_service.dart';
+import 'services/firestore_service.dart';
 
-class UploadScreen extends StatelessWidget {
+class UploadScreen extends StatefulWidget {
   const UploadScreen({super.key});
+
+  @override
+  State<UploadScreen> createState() => _UploadScreenState();
+}
+
+class _UploadScreenState extends State<UploadScreen> {
+  File? _selectedFile;
+  bool _isUploading = false;
+  final StorageService _storageService = StorageService();
+  final FirestoreService _firestoreService = FirestoreService();
+
+  Future<void> _pickFile() async {
+    FilePickerResult? result = await FilePicker.platform.pickFiles(
+      type: FileType.custom,
+      allowedExtensions: ['pdf', 'png', 'jpg'],
+    );
+
+    if (result != null) {
+      setState(() {
+        _selectedFile = File(result.files.single.path!);
+      });
+    }
+  }
+
+  void _clearFile() {
+    setState(() {
+      _selectedFile = null;
+    });
+  }
+
+  Future<void> _uploadFile() async {
+    if (_selectedFile == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please select a file first.')),
+      );
+      return;
+    }
+
+    setState(() {
+      _isUploading = true;
+    });
+
+    try {
+      // 1. Upload to Firebase Storage
+      final downloadUrl =
+          await _storageService.uploadCertificateFile(_selectedFile!);
+
+      // 2. Add metadata to Firestore
+      await _firestoreService.addCertificate({
+        'name': _selectedFile!.path.split('/').last,
+        'recipient':
+            'Uploaded Certificate', // Placeholder - consider adding a form field for this
+        'organization': 'Uploaded', // Placeholder
+        'issuedDate': DateTime.now(),
+        'fileUrl': downloadUrl,
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('File uploaded successfully!')),
+      );
+      Navigator.pop(context);
+    } catch (e) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Upload failed: $e')),
+      );
+    } finally {
+      setState(() {
+        _isUploading = false;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -85,18 +160,19 @@ class UploadScreen extends StatelessWidget {
                   const SizedBox(height: 32),
 
                   // Upload Icon
-                  Container(
-                    padding: const EdgeInsets.all(24),
-                    decoration: BoxDecoration(
-                      color: isDark ? Colors.grey[800] : Colors.blue[50],
-                      shape: BoxShape.circle,
+                  if (_selectedFile == null)
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.blue[50],
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        Icons.cloud_upload_rounded,
+                        size: 64,
+                        color: isDark ? Colors.blue[300] : Colors.blue[700],
+                      ),
                     ),
-                    child: Icon(
-                      Icons.cloud_upload_rounded,
-                      size: 64,
-                      color: isDark ? Colors.blue[300] : Colors.blue[700],
-                    ),
-                  ),
                   const SizedBox(height: 32),
 
                   // File preview
@@ -117,20 +193,22 @@ class UploadScreen extends StatelessWidget {
                         const SizedBox(width: 12),
                         Expanded(
                           child: Text(
-                            'No file selected',
+                            _selectedFile?.path.split('/').last ??
+                                'No file selected',
                             style: GoogleFonts.inter(
                               fontSize: 16,
                               color: textColor,
                             ),
                           ),
                         ),
-                        IconButton(
-                          icon: Icon(
-                            Icons.close,
-                            color: isDark ? Colors.red[300] : Colors.red[600],
+                        if (_selectedFile != null)
+                          IconButton(
+                            icon: Icon(
+                              Icons.close,
+                              color: isDark ? Colors.red[300] : Colors.red[600],
+                            ),
+                            onPressed: _clearFile,
                           ),
-                          onPressed: () {},
-                        ),
                       ],
                     ),
                   ),
@@ -140,13 +218,13 @@ class UploadScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: OutlinedButton.icon(
-                      onPressed: () {},
+                      onPressed: _pickFile,
                       icon: Icon(
                         Icons.attach_file,
                         color: isDark ? Colors.blue[300] : Colors.blue[700],
                       ),
                       label: Text(
-                        'Choose File',
+                        _selectedFile == null ? 'Choose File' : 'Change File',
                         style: GoogleFonts.inter(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,
@@ -170,10 +248,21 @@ class UploadScreen extends StatelessWidget {
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
-                      onPressed: () {},
-                      icon: const Icon(Icons.send),
+                      onPressed: (_selectedFile == null || _isUploading)
+                          ? null
+                          : _uploadFile,
+                      icon: _isUploading
+                          ? const SizedBox(
+                              width: 20,
+                              height: 20,
+                              child: CircularProgressIndicator(
+                                color: Colors.white,
+                                strokeWidth: 2,
+                              ),
+                            )
+                          : const Icon(Icons.send),
                       label: Text(
-                        'Upload Now',
+                        _isUploading ? 'Uploading...' : 'Upload Now',
                         style: GoogleFonts.inter(
                           fontSize: 16,
                           fontWeight: FontWeight.w500,

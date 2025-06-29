@@ -356,21 +356,26 @@ class _HomeScreenState extends State<HomeScreen>
     print('DEBUG: Current role: $role');
     print('DEBUG: User: ${userProvider.user?.email}');
 
-    // Define screens and nav items based on role
+    // Define screens and nav items - static list for all users
     final List<Widget> screens = [
-      const DashboardScreen(),
-      if (role == 'admin') const AdminPanelScreen(),
-      if (role == 'ca' || role == 'admin') const ApprovalScreen(),
-      const UploadScreen(),
-      const ProfileScreen(),
+      // Remove const to allow conditional items
+      const DashboardScreen(), // Index 0
+      const CertificatesScreen(), // Index 1
+      if (role == 'admin' || role == 'ca')
+        const ApprovalScreen(), // Index 2 (conditional)
+      const SettingsScreen(), // Index 3 (or 2 if no approval)
+      const ProfileScreen(), // Index 4 (or 3 if no approval)
     ];
+
+    // Define the EXACT navigation items for the bottom navigation bar.
+    // The order and number of items here MUST match the 'screens' list above.
     final List<Map<String, dynamic>> navItems = [
+      // Remove const to allow conditional items
       {'icon': Icons.dashboard_outlined, 'label': 'Dashboard'},
-      if (role == 'admin')
-        {'icon': Icons.admin_panel_settings, 'label': 'Admin'},
-      if (role == 'ca' || role == 'admin')
+      {'icon': Icons.article_outlined, 'label': 'Certificates'},
+      if (role == 'admin' || role == 'ca')
         {'icon': Icons.verified, 'label': 'Approvals'},
-      {'icon': Icons.upload_file_outlined, 'label': 'Upload'},
+      {'icon': Icons.settings_outlined, 'label': 'Settings'},
       {'icon': Icons.person_outline, 'label': 'Profile'},
     ];
 
@@ -588,30 +593,22 @@ class DashboardScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              _buildActionCard(
-                context,
-                Icons.article_outlined,
-                'Certificates',
-                const Color(0xFF00B894),
-                () => Navigator.push(
+              if (Provider.of<UserProvider>(context, listen: false).role ==
+                      'admin' ||
+                  Provider.of<UserProvider>(context, listen: false).role ==
+                      'ca')
+                _buildActionCard(
                   context,
-                  MaterialPageRoute(
-                    builder: (context) => const CertificatesScreen(),
+                  Icons.verified,
+                  'Approvals',
+                  const Color(0xFFFF6B6B),
+                  () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (context) => const ApprovalScreen(),
+                    ),
                   ),
                 ),
-              ),
-              _buildActionCard(
-                context,
-                Icons.settings_outlined,
-                'Settings',
-                const Color(0xFF6C5CE7),
-                () => Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => const SettingsScreen(),
-                  ),
-                ),
-              ),
             ],
           ),
           const SizedBox(height: 40),
