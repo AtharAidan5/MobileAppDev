@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'services/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 
 class CreateCertificateScreen extends StatefulWidget {
   const CreateCertificateScreen({super.key});
@@ -49,7 +51,19 @@ class _CreateCertificateScreenState extends State<CreateCertificateScreen> {
     }
   }
 
-  void _saveCertificate() {
+  void _saveCertificate() async {
+    final data = {
+      'name': _nameController.text,
+      'recipient': _recipientController.text,
+      'organization': _organizationController.text,
+      'purpose': _purposeController.text,
+      'issuedDate':
+          _issuedDate != null ? Timestamp.fromDate(_issuedDate!) : null,
+      'expiryDate':
+          _expiryDate != null ? Timestamp.fromDate(_expiryDate!) : null,
+      'signature': _signatureText ?? '',
+    };
+    await FirestoreService().addCertificate(data);
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
         content: Text(
